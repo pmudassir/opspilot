@@ -10,6 +10,7 @@ from app.departments.router import router as departments_router
 from app.errors import register_error_handlers
 from app.health import router as health_router
 from app.organizations.router import router as organizations_router
+from app.requests.router import router as requests_router
 
 
 @asynccontextmanager
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(organizations_router)
     app.include_router(departments_router)
+    app.include_router(requests_router)
     return app
 
 

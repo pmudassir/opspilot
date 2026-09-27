@@ -30,6 +30,12 @@ Alternatives considered:
 | POST | `/departments` | departments:manage. Names unique per org, case-insensitive |
 | GET | `/departments/{department_id}/members` | members:read |
 | PUT / DELETE | `/departments/{department_id}/members/{membership_id}` | departments:manage. Idempotent |
+| POST | `/requests` | requests:create. `department_id` in the body must belong to the org (else 422) |
+| GET | `/requests` | requests:read. Filters: `status` (repeatable), `department_id`, `priority`; keyset pagination (`limit` ≤ 100, `cursor`) |
+| GET | `/requests/{request_id}` | requests:read |
+| GET | `/requests/{request_id}/events` | requests:read |
+
+**Request visibility:** members see only requests they created (`requests:read_all` is staff-only). It's applied as a SQL filter, and invisible requests return 404, the same as nonexistent ones.
 
 ## Permissions (V1)
 | Action | Member | Agent | Manager | Admin |

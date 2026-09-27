@@ -8,9 +8,9 @@
 | `memberships` | yes | user ↔ org; `role` enum, `status` (active/deactivated); unique (org, user) |
 | `departments` | yes | name unique per org, case-insensitive (`UNIQUE (organization_id, lower(name))`) |
 | `department_members` | yes | membership ↔ department (N:M); PK (department_id, membership_id); composite FKs to both parents |
-| `requests` | yes | department, requester, assignee?, status, priority, title, description, lifecycle timestamps |
+| `requests` | yes | department, requester, assignee?, status, priority, title, description. Composite FKs to department/requester/assignee. Lifecycle timestamps arrive in Step 6 |
 | `comments` | yes | request, author, body |
-| `request_events` | yes | append-only history; typed `from_status`/`to_status`, small JSONB payload |
+| `request_events` | yes | append-only (DB trigger rejects UPDATE/DELETE); typed `from_status`/`to_status`, JSONB `data`; `created_at = clock_timestamp()` so events in one transaction still order correctly |
 | `sessions` | no | hashed session token, user, expiry (see authentication.md) |
 
 Deferred: Task, Invitation, Location, Category, per-org request numbers.
@@ -40,6 +40,9 @@ Request 1──N RequestEvent
   - `(organization_id, user_id)` unique already serves org-first lookups.
   - `(organization_id, id)` unique on memberships/departments: required targets for composite FKs.
   - `department_members (organization_id, membership_id)`: "which departments is this member in?"
+  - `requests (organization_id, created_at DESC, id DESC)`: default list + keyset pagination. EXPLAIN shows an Index Only Scan with the cursor comparison in the Index Cond and no Sort.
+  - `requests (organization_id, requester_membership_id, created_at DESC)`: a member's own requests.
+  - `request_events (organization_id, request_id, created_at)`: one request's timeline.
 
 ## Migrations
 - Autogenerate is a draft: always read it before applying. It can't tell rename from drop+add.

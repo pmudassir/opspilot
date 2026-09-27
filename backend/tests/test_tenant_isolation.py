@@ -23,12 +23,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tests.helpers import (
     add_member_id,
     create_department_id,
+    create_request,
+    create_request_id,
     logged_in,
     org_url,
     signup_org,
 )
 
 ORG_ROUTE_PREFIX = "/api/v1/orgs/{org_id}"
+OBJECT_ID_PLACEHOLDERS = ("department_id", "membership_id", "request_id")
 
 
 @dataclass(frozen=True)
@@ -43,7 +46,7 @@ class RouteCase:
 
     @property
     def has_object_ids(self) -> bool:
-        return "{department_id}" in self.path or "{membership_id}" in self.path
+        return any(f"{{{name}}}" in self.path for name in OBJECT_ID_PLACEHOLDERS)
 
 
 ORG_ROUTES = [
@@ -60,6 +63,10 @@ ORG_ROUTES = [
     RouteCase("GET", "/departments/{department_id}/members"),
     RouteCase("PUT", "/departments/{department_id}/members/{membership_id}"),
     RouteCase("DELETE", "/departments/{department_id}/members/{membership_id}"),
+    RouteCase("GET", "/requests"),
+    RouteCase("POST", "/requests", {"title": "Injected", "department_id": "{department_id}"}),
+    RouteCase("GET", "/requests/{request_id}"),
+    RouteCase("GET", "/requests/{request_id}/events"),
 ]
 
 
@@ -75,6 +82,7 @@ class World:
     dave_membership_b: str  # agent in B
     it_department_a: str
     it_department_b: str
+    request_a: str  # created by Carol in A's IT department
 
 
 @pytest.fixture
@@ -87,7 +95,9 @@ async def world(make_client: Callable[[], AsyncClient]) -> World:
     it_a = await create_department_id(alice, org_a, "IT")
     it_b = await create_department_id(bob, org_b, "IT")
     assert (await alice.put(org_url(org_a, f"/departments/{it_a}/members/{carol}"))).status_code == 204
-    return World(alice, bob, org_a, org_b, carol, dave, it_a, it_b)
+    carol_client = await logged_in(make_client(), "carol@a.example")
+    request_a = await create_request_id(carol_client, org_a, it_a, title="Projector broken")
+    return World(alice, bob, org_a, org_b, carol, dave, it_a, it_b, request_a)
 
 
 async def send(
@@ -97,11 +107,21 @@ async def send(
     org_id: str,
     department_id: str,
     membership_id: str,
+    request_id: str,
 ) -> int:
-    url = (ORG_ROUTE_PREFIX + route.path).format(
-        org_id=org_id, department_id=department_id, membership_id=membership_id
+    ids = {
+        "org_id": org_id,
+        "department_id": department_id,
+        "membership_id": membership_id,
+        "request_id": request_id,
+    }
+    url = (ORG_ROUTE_PREFIX + route.path).format(**ids)
+    body = (
+        {k: v.format(**ids) if isinstance(v, str) else v for k, v in route.json.items()}
+        if route.json
+        else None
     )
-    response = await client.request(route.method, url, json=route.json)
+    response = await client.request(route.method, url, json=body)
     return response.status_code
 
 
@@ -125,6 +145,7 @@ async def test_foreign_org_id_in_url_is_not_found(world: World, route: RouteCase
         org_id=world.org_a,
         department_id=world.it_department_a,
         membership_id=world.carol_membership_a,
+        request_id=world.request_a,
     )
 
     assert status == 404
@@ -142,6 +163,7 @@ async def test_foreign_object_ids_under_own_org_are_not_found(
         org_id=world.org_b,
         department_id=world.it_department_a,
         membership_id=world.carol_membership_a,
+        request_id=world.request_a,
     )
 
     assert status == 404
@@ -153,6 +175,14 @@ async def test_foreign_department_with_own_member_is_not_found(world: World, met
     url = org_url(world.org_b, f"/departments/{world.it_department_a}/members/{world.dave_membership_b}")
 
     assert (await world.bob.request(method, url)).status_code == 404
+
+
+async def test_cannot_create_request_in_foreign_department(world: World) -> None:
+    """The department_id in the *body* is checked against the caller's org too."""
+    response = await create_request(world.bob, world.org_b, world.it_department_a)
+
+    assert response.status_code == 422
+    assert (await world.bob.get(org_url(world.org_b, "/requests"))).json()["items"] == []
 
 
 async def test_cannot_add_foreign_member_to_own_department(world: World) -> None:
@@ -171,6 +201,7 @@ async def test_unauthenticated_requests_are_rejected(
         org_id=world.org_a,
         department_id=world.it_department_a,
         membership_id=world.carol_membership_a,
+        request_id=world.request_a,
     )
 
     assert status == 401
@@ -185,6 +216,7 @@ async def test_attacks_leave_victim_organization_unchanged(world: World) -> None
                 org_id=org_id,
                 department_id=world.it_department_a,
                 membership_id=world.carol_membership_a,
+                request_id=world.request_a,
             )
 
     members = (await world.alice.get(org_url(world.org_a, "/members"))).json()
@@ -196,8 +228,10 @@ async def test_attacks_leave_victim_organization_unchanged(world: World) -> None
         ("alice@a.example", "admin", "active"),
         ("carol@a.example", "agent", "active"),
     ]
+    requests = (await world.alice.get(org_url(world.org_a, "/requests"))).json()["items"]
     assert [d["name"] for d in departments] == ["IT"]
     assert [m["email"] for m in it_members] == ["carol@a.example"]
+    assert [r["title"] for r in requests] == ["Projector broken"]
 
 
 async def test_deactivated_member_loses_access_immediately(
@@ -235,6 +269,24 @@ async def test_database_rejects_cross_tenant_department_membership(
         await db_session.execute(
             insert,
             {"org": world.org_b, "department": world.it_department_a, "membership": world.dave_membership_b},
+        )
+
+
+async def test_database_rejects_request_in_foreign_department(
+    world: World, db_session: AsyncSession
+) -> None:
+    with pytest.raises(IntegrityError, match="fk_requests_department"):
+        await db_session.execute(
+            text(
+                "INSERT INTO requests (id, organization_id, department_id, requester_membership_id, title) "
+                "VALUES (:id, :org, :department, :requester, 'x')"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "org": world.org_b,
+                "department": world.it_department_a,
+                "requester": world.dave_membership_b,
+            },
         )
 
 

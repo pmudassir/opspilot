@@ -8,6 +8,7 @@ from app.auth.models import AuthSession
 from app.base import Base
 from app.departments.models import Department, DepartmentMember
 from app.organizations.models import Membership, Organization
+from app.requests.models import Request, RequestEvent
 from app.users.models import User
 
 __all__ = [
@@ -17,5 +18,7 @@ __all__ = [
     "DepartmentMember",
     "Membership",
     "Organization",
+    "Request",
+    "RequestEvent",
     "User",
 ]

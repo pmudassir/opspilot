@@ -15,10 +15,21 @@ class Permission(StrEnum):
     DEPARTMENTS_MANAGE = "departments:manage"
     MEMBERS_READ = "members:read"
     MEMBERS_MANAGE = "members:manage"
+    REQUESTS_CREATE = "requests:create"
+    # Every role may read requests; members only see their own (see REQUESTS_READ_ALL).
+    REQUESTS_READ = "requests:read"
+    REQUESTS_READ_ALL = "requests:read_all"
 
 
-_EVERYONE = frozenset({Permission.ORGANIZATION_READ, Permission.DEPARTMENTS_READ})
-_STAFF = _EVERYONE | {Permission.MEMBERS_READ}
+_EVERYONE = frozenset(
+    {
+        Permission.ORGANIZATION_READ,
+        Permission.DEPARTMENTS_READ,
+        Permission.REQUESTS_CREATE,
+        Permission.REQUESTS_READ,
+    }
+)
+_STAFF = _EVERYONE | {Permission.MEMBERS_READ, Permission.REQUESTS_READ_ALL}
 
 ROLE_PERMISSIONS: dict[MembershipRole, frozenset[Permission]] = {
     MembershipRole.MEMBER: _EVERYONE,

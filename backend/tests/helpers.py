@@ -82,3 +82,25 @@ async def logged_in(client: AsyncClient, email: str) -> AsyncClient:
     response = await login(client, email=email)
     assert response.status_code == 200, response.text
     return client
+
+
+async def create_request(
+    client: AsyncClient,
+    org_id: str,
+    department_id: str,
+    *,
+    title: str = "Wi-Fi keeps disconnecting",
+    **fields: str,
+) -> Response:
+    return await client.post(
+        org_url(org_id, "/requests"),
+        json={"title": title, "department_id": department_id, **fields},
+    )
+
+
+async def create_request_id(
+    client: AsyncClient, org_id: str, department_id: str, *, title: str = "Wi-Fi keeps disconnecting"
+) -> str:
+    response = await create_request(client, org_id, department_id, title=title)
+    assert response.status_code == 201, response.text
+    return response.json()["id"]

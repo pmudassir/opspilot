@@ -57,3 +57,13 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** it's the framework convention, so validation errors (422) and our errors share one shape with no custom layer.
 - **Alternatives:** a `{success, data, error}` envelope on every response (extra wrapping, duplicates HTTP status semantics).
 - **Revisit when:** clients need machine-readable error codes. Then add a `code` field alongside `detail`.
+
+## ADR-012: Keyset (cursor) pagination for request lists
+- **Why:** stable while new requests arrive (OFFSET repeats or skips rows), and O(page) via the `(organization_id, created_at DESC, id DESC)` index instead of scanning skipped rows.
+- **Alternatives:** OFFSET/LIMIT (simple, supports "jump to page N", unstable and slower for deep pages).
+- **Revisit when:** users genuinely need page numbers or arbitrary sort orders (each sort order needs its own keyset + index).
+
+## ADR-013: The audit log is append-only at the database level
+- **Why:** history is only trustworthy if nobody can rewrite it, including buggy code, scripts and manual SQL. A trigger rejects UPDATE/DELETE on `request_events`.
+- **Alternatives:** convention only (no API to edit events); REVOKE privileges from the app role (needs separate DB roles for migrations vs. runtime).
+- **Revisit when:** we split DB roles (then also REVOKE), or need data-retention deletion (a controlled, audited procedure).

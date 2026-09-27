@@ -23,6 +23,12 @@ class ConflictError(DomainError):
     status_code = status.HTTP_409_CONFLICT
 
 
+class UnprocessableError(DomainError):
+    """Well-formed input that refers to something invalid, e.g. an unknown department_id."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
 async def _handle_domain_error(_: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, DomainError)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
