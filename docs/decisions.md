@@ -52,3 +52,8 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** tests exercise the real migration path (including every downgrade) and real commits; step 6 concurrency tests need real transactions.
 - **Alternatives:** `create_all()` (can drift from migrations); rollback-per-test (faster, hides commit behavior).
 - **Revisit when:** the suite gets slow enough to hurt (then: rollback-per-test for pure-read tests).
+
+## ADR-011: Errors use FastAPI's `{"detail": ...}` shape; success bodies are the resource itself
+- **Why:** it's the framework convention, so validation errors (422) and our errors share one shape with no custom layer.
+- **Alternatives:** a `{success, data, error}` envelope on every response (extra wrapping, duplicates HTTP status semantics).
+- **Revisit when:** clients need machine-readable error codes. Then add a `code` field alongside `detail`.

@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
@@ -27,3 +28,8 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def violated_constraint(exc: IntegrityError) -> str | None:
+    """Name of the constraint an IntegrityError violated (as reported by asyncpg)."""
+    return getattr(exc.orig.__cause__, "constraint_name", None)
