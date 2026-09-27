@@ -1,9 +1,8 @@
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 
 import pytest
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,21 +14,6 @@ from app.users.models import User
 from tests.helpers import DEFAULT_PASSWORD, login, session_cookie, signup
 
 ME_URL = "/api/v1/auth/me"
-
-
-@pytest.fixture
-async def make_client(app: FastAPI) -> AsyncIterator[Callable[[], AsyncClient]]:
-    """Independent clients = independent cookie jars = independent browsers."""
-    clients: list[AsyncClient] = []
-
-    def factory() -> AsyncClient:
-        c = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
-        clients.append(c)
-        return c
-
-    yield factory
-    for c in clients:
-        await c.aclose()
 
 
 # --- signup -----------------------------------------------------------------

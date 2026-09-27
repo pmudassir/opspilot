@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.models import AuthSession
 from app.auth.passwords import hash_password, verify_password
 from app.db import violated_constraint
+from app.errors import ConflictError
 from app.organizations.models import Membership, MembershipRole, Organization
 from app.users.models import User
 
@@ -21,8 +22,9 @@ SESSION_TOKEN_BYTES = 32
 USER_EMAIL_UNIQUE_CONSTRAINT = "uq_users_email"
 
 
-class EmailAlreadyRegisteredError(Exception):
-    pass
+class EmailAlreadyRegisteredError(ConflictError):
+    def __init__(self) -> None:
+        super().__init__("An account with this email already exists")
 
 
 class InvalidCredentialsError(Exception):

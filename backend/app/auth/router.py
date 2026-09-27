@@ -5,7 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
 from app.auth.dependencies import SESSION_COOKIE_NAME, CurrentUserDep, SessionTokenDep
-from app.auth.schemas import LoginRequest, MembershipOut, MeResponse, SignupRequest, UserOut
+from app.auth.schemas import (
+    LoginRequest,
+    MembershipOut,
+    MeResponse,
+    SignupRequest,
+    UserOut,
+)
 from app.config import Settings, SettingsDep
 from app.db import SessionDep
 from app.organizations.service import list_active_memberships
@@ -54,20 +60,14 @@ async def _me(session: AsyncSession, user: User) -> MeResponse:
 async def signup(
     body: SignupRequest, session: SessionDep, settings: SettingsDep, response: Response
 ) -> MeResponse:
-    try:
-        user, issued = await service.register(
-            session,
-            email=body.email,
-            password=body.password,
-            full_name=body.full_name,
-            organization_name=body.organization_name,
-            session_ttl=_session_ttl(settings),
-        )
-    except service.EmailAlreadyRegisteredError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
-        ) from None
+    user, issued = await service.register(
+        session,
+        email=body.email,
+        password=body.password,
+        full_name=body.full_name,
+        organization_name=body.organization_name,
+        session_ttl=_session_ttl(settings),
+    )
     _set_session_cookie(response, issued, settings)
     return await _me(session, user)
 

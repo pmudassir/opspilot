@@ -6,7 +6,16 @@ A model missing here would look "deleted" to autogenerate, which would emit DROP
 
 from app.auth.models import AuthSession
 from app.base import Base
+from app.departments.models import Department, DepartmentMember
 from app.organizations.models import Membership, Organization
 from app.users.models import User
 
-__all__ = ["AuthSession", "Base", "Membership", "Organization", "User"]
+__all__ = [
+    "AuthSession",
+    "Base",
+    "Department",
+    "DepartmentMember",
+    "Membership",
+    "Organization",
+    "User",
+]

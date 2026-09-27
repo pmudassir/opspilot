@@ -33,7 +33,12 @@ class Membership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A user's identity *within* one organization. Authorization reads this, not User."""
 
     __tablename__ = "memberships"
-    __table_args__ = (UniqueConstraint("organization_id", "user_id"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id"),
+        # Target for composite foreign keys from tenant-owned children, e.g.
+        # (organization_id, membership_id) -> memberships(organization_id, id).
+        UniqueConstraint("organization_id", "id"),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="RESTRICT")

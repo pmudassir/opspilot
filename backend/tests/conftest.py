@@ -7,7 +7,7 @@ DEFAULT_TEST_DATABASE_URL = (
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
 os.environ["ENVIRONMENT"] = "test"
 
-from collections.abc import AsyncIterator, Iterator  # noqa: E402
+from collections.abc import AsyncIterator, Callable, Iterator  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
@@ -69,3 +69,18 @@ def app() -> FastAPI:
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
+
+@pytest.fixture
+async def make_client(app: FastAPI) -> AsyncIterator[Callable[[], AsyncClient]]:
+    """Independent clients = independent cookie jars = independent browsers/users."""
+    clients: list[AsyncClient] = []
+
+    def factory() -> AsyncClient:
+        new_client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+        clients.append(new_client)
+        return new_client
+
+    yield factory
+    for opened in clients:
+        await opened.aclose()

@@ -6,8 +6,8 @@
 | `organizations` | root | tenant root |
 | `users` | no (global) | email (unique), password hash; nothing org-specific |
 | `memberships` | yes | user ↔ org; `role` enum, `status` (active/deactivated); unique (org, user) |
-| `departments` | yes | unique name per org |
-| `department_members` | yes | membership ↔ department (N:M) |
+| `departments` | yes | name unique per org, case-insensitive (`UNIQUE (organization_id, lower(name))`) |
+| `department_members` | yes | membership ↔ department (N:M); PK (department_id, membership_id); composite FKs to both parents |
 | `requests` | yes | department, requester, assignee?, status, priority, title, description, lifecycle timestamps |
 | `comments` | yes | request, author, body |
 | `request_events` | yes | append-only history; typed `from_status`/`to_status`, small JSONB payload |
@@ -38,12 +38,15 @@ Request 1──N RequestEvent
 - Indexes only for known query patterns. Postgres does **not** index FK columns automatically.
   - `memberships.user_id`: "which orgs is this user in?" + RESTRICT check on user delete.
   - `(organization_id, user_id)` unique already serves org-first lookups.
+  - `(organization_id, id)` unique on memberships/departments: required targets for composite FKs.
+  - `department_members (organization_id, membership_id)`: "which departments is this member in?"
 
 ## Migrations
 - Autogenerate is a draft: always read it before applying. It can't tell rename from drop+add.
 - Migrations use plain column types (`sa.String`), not app enums, so they stay frozen snapshots.
 - `tests/test_migrations.py` fails if models change without a migration.
 - Never edit a migration that has been applied anywhere shared.
+- Autogenerate doesn't order *constraints on existing tables* before new FKs that need them. Check the order.
 
 ## Request lifecycle
 ```
