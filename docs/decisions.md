@@ -98,3 +98,4 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** the lifecycle rules (role, state, assignee, requester-while-open, department) are subtle; re-implementing them in the frontend would drift. The same pure rule functions both enforce actions and compute `allowed_actions`. A property test attempts every action for every (state, user) and asserts success ⇔ advertised.
 - **Alternatives:** frontend derives buttons from role/status (duplicated business logic); show all buttons and rely on errors (poor UX).
 - **Revisit when:** a client needs the *reason* an action is unavailable (return reasons alongside).
+- **Extended (Phase 2 Step 4):** `/me` also returns each membership's `permissions` from `ROLE_PERMISSIONS`, so navigation and admin controls don't compare role names either.

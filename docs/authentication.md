@@ -10,7 +10,7 @@ Code: `backend/app/auth/`.
 | POST | `/signup` | 201 + cookie. Creates user + org + admin membership + session in **one transaction**. Duplicate email → 409 |
 | POST | `/login` | 200 + cookie. Any failure → 401 `Invalid email or password` |
 | POST | `/logout` | 204. Deletes the session row (revocation), clears cookie. Idempotent |
-| GET | `/me` | 200: user + active memberships (org, role). 401 without a valid session |
+| GET | `/me` | 200: user + active memberships (org, role, `permissions`). 401 without a valid session |
 
 ## Design
 - **Passwords:** argon2id (`argon2-cffi` defaults, ~64 MiB). Hashing runs in a thread pool so it doesn't block the event loop. Length 12–128, no composition rules (NIST 800-63B).

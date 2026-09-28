@@ -2,13 +2,20 @@
 
 import { createContext, useContext } from "react";
 
+import type { Schemas } from "@/lib/api/client";
 import type { Role } from "@/lib/auth";
+
+export type Permission = Schemas["Permission"];
 
 export type CurrentOrg = {
   organizationId: string;
   organizationName: string;
-  /** For showing/hiding UI only. The API enforces every permission. */
   role: Role;
+  /**
+   * The permissions the API enforces for this membership (from /me).
+   * Use for showing/hiding UI only; the API checks every call regardless.
+   */
+  can: (permission: Permission) => boolean;
 };
 
 export const OrgContext = createContext<CurrentOrg | null>(null);

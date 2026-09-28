@@ -21,7 +21,7 @@ const TITLE_MAX_LENGTH = 200;
 const DESCRIPTION_MAX_LENGTH = 5000;
 
 export default function NewRequestPage() {
-  const { organizationId, role } = useCurrentOrg();
+  const { organizationId, can } = useCurrentOrg();
   const router = useRouter();
   const departments = useDepartments(organizationId);
   const create = useCreateRequest(organizationId);
@@ -48,7 +48,13 @@ export default function NewRequestPage() {
     return (
       <div className="max-w-xl text-sm text-zinc-600">
         Requests are routed to a department, and this organization has none yet.{" "}
-        {role === "admin" ? "Create a department first." : "Ask an admin to create one."}
+        {can("departments:manage") ? (
+          <Link href={`/orgs/${organizationId}/departments`} className="font-medium text-teal-800 hover:underline">
+            Create a department first.
+          </Link>
+        ) : (
+          "Ask an admin to create one."
+        )}
       </div>
     );
   }

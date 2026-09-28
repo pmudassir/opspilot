@@ -4,6 +4,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field
 
 from app.organizations.models import ORGANIZATION_NAME_MAX_LENGTH, MembershipRole
+from app.permissions import Permission
 from app.schemas import (
     PASSWORD_MAX_LENGTH,
     FullName,
@@ -37,6 +38,9 @@ class MembershipOut(BaseModel):
     organization_id: uuid.UUID
     organization_name: str
     role: MembershipRole
+    # From the same role → permission map the API enforces, so the UI can decide what
+    # to show without its own copy of the rules. (Showing ≠ allowing: every call is checked.)
+    permissions: list[Permission]
 
 
 class MeResponse(BaseModel):

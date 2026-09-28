@@ -15,6 +15,7 @@ from app.auth.schemas import (
 from app.config import Settings, SettingsDep
 from app.db import SessionDep
 from app.organizations.service import list_active_memberships
+from app.permissions import ROLE_PERMISSIONS
 from app.users.models import User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -50,6 +51,7 @@ async def _me(session: AsyncSession, user: User) -> MeResponse:
                 organization_id=organization.id,
                 organization_name=organization.name,
                 role=membership.role,
+                permissions=sorted(ROLE_PERMISSIONS[membership.role]),
             )
             for membership, organization in memberships
         ],

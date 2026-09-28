@@ -516,6 +516,8 @@ export interface components {
             organization_id: string;
             /** Organization Name */
             organization_name: string;
+            /** Permissions */
+            permissions: components["schemas"]["Permission"][];
             role: components["schemas"]["MembershipRole"];
         };
         /**
@@ -538,6 +540,11 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * Permission
+         * @enum {string}
+         */
+        Permission: "organization:read" | "departments:read" | "departments:manage" | "members:read" | "members:manage" | "requests:create" | "requests:read" | "requests:read_all" | "requests:comment" | "requests:assign" | "requests:claim" | "requests:work" | "requests:work_any" | "requests:cancel_any";
         /** PersonOut */
         PersonOut: {
             /** Full Name */

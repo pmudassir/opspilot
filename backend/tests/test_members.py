@@ -204,3 +204,31 @@ async def test_update_requires_at_least_one_field(admin_and_org: tuple[AsyncClie
     response = await admin.patch(org_url(org_id, f"/members/{membership_id}"), json={})
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("role", "has", "lacks"),
+    [
+        ("admin", ["members:manage", "departments:manage", "requests:assign"], []),
+        ("manager", ["members:read", "requests:assign"], ["members:manage"]),
+        ("agent", ["members:read", "requests:claim"], ["requests:assign", "members:manage"]),
+        ("member", ["requests:create", "departments:read"], ["members:read", "requests:read_all"]),
+    ],
+)
+async def test_me_exposes_the_enforced_permissions_per_membership(
+    admin_and_org: tuple[AsyncClient, str],
+    make_client: Callable[[], AsyncClient],
+    role: str,
+    has: list[str],
+    lacks: list[str],
+) -> None:
+    admin, org_id = admin_and_org
+    client = admin
+    if role != "admin":
+        await add_member_id(admin, org_id, email="user@a.example", role=role)
+        client = await logged_in(make_client(), "user@a.example")
+
+    permissions = (await client.get("/api/v1/auth/me")).json()["memberships"][0]["permissions"]
+
+    assert set(has) <= set(permissions)
+    assert not set(lacks) & set(permissions)

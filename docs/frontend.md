@@ -15,6 +15,7 @@
 - `safeNextPath()` accepts only relative paths (`/x`, not `//evil` or `https://…`) to prevent an open redirect after login.
 - Retries: only network errors and 5xx (a 4xx can't succeed on retry).
 
+
 ## Routes
 | Route | Notes |
 |---|---|
@@ -23,7 +24,13 @@
 | `/orgs/[orgId]/*` | `AppShell`: requires session + membership of `orgId`; provides `useCurrentOrg()` (role for UI only) |
 | `/orgs/[orgId]/requests` | List: filters in the URL, "Load more" via cursor (`useInfiniteQuery`), loading/empty/filtered-empty/error states |
 | `/orgs/[orgId]/requests/new` | Create form (department required, priority default normal); 422s shown per field; opens the new request |
+| `/orgs/[orgId]/members` | Needs `members:read`. Admins (`members:manage`): add member (new accounts only; 409 for existing emails), inline role change, two-step deactivate, reactivate. The API's "keep one active admin" 409 is shown as-is |
+| `/orgs/[orgId]/departments` | Everyone sees names; `members:read` shows staff; `departments:manage` creates departments and adds/removes staff (idempotent PUT/DELETE) |
 | `/orgs/[orgId]/requests/[requestId]` | Detail: description, activity timeline (events + comments), comment form, actions panel, details/timestamps; 404 → "doesn't exist or no access" |
+
+## Permissions come from the API
+- `/me` returns `permissions` per membership, straight from the backend's role → permission map. `useCurrentOrg().can("members:manage")` decides what to *show* (nav items, forms, inline controls). Never compare role names in the UI.
+- Showing ≠ allowing: a member typing `/members` gets the API's 403 → "You don't have access".
 
 ## Actions come from the API
 - Every `RequestOut` carries `allowed_actions`, computed by the backend's lifecycle rules for the *caller* (`app/requests/lifecycle.py`). The actions panel renders only those; no role logic in the frontend.
@@ -45,4 +52,5 @@
 - `@playwright/test` is pinned to 1.60.0 to match the locally cached Chromium build.
 - When checking UI locally, make sure *your* server is the one answering: a dev server already on :3000/:8000 silently took the ports. Use other ports (`API_ORIGIN`, `ALLOWED_ORIGINS`) for scripted checks.
 - Don't run `next build` in the same folder as a running `next dev`: it left the dev server returning 404 for a newly added route (a fresh dev server served it fine). Restarting `npm run dev` fixes it. Build from a separate copy instead.
+- Playwright `getByRole(..., { name })` matches a **case-insensitive substring** by default: waiting for heading "IT" matched "Facil*it*ies". That made a script type into a form mid-request, so it looked like a stuck button. Use `exact: true` for short names.
 - In browser checks, use auto-retrying assertions (`expect(...).toHaveValue(...)`) instead of reading state right after an action. The UI updates in more than one render.

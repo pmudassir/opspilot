@@ -8,9 +8,13 @@ import { Button } from "@/components/ui/button";
 import { ErrorAlert, PageLoading } from "@/components/ui/feedback";
 import { isUnauthorized } from "@/lib/api/client";
 import { useLogout, useMe } from "@/lib/auth";
-import { OrgContext } from "@/lib/org";
+import { OrgContext, type Permission } from "@/lib/org";
 
-const NAV = [{ href: "requests", label: "Requests" }] as const;
+const NAV: { href: string; label: string; permission: Permission }[] = [
+  { href: "requests", label: "Requests", permission: "requests:read" },
+  { href: "members", label: "Members", permission: "members:read" },
+  { href: "departments", label: "Departments", permission: "departments:read" },
+];
 
 /** Layout for /orgs/[orgId]/*: requires a session and membership of that organization. */
 export function AppShell({ children }: { children: ReactNode }) {
@@ -45,10 +49,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
+  const permissions = new Set(membership.permissions);
   const org = {
     organizationId: membership.organization_id,
     organizationName: membership.organization_name,
     role: membership.role,
+    can: (permission: Permission) => permissions.has(permission),
   };
 
   return (
@@ -58,7 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="text-sm font-semibold tracking-tight text-teal-800">OpsPilot</span>
           <OrgSwitcher currentOrgId={orgId} memberships={me.data.memberships} />
           <nav className="flex gap-1">
-            {NAV.map((item) => {
+            {NAV.filter((item) => org.can(item.permission)).map((item) => {
               const href = `/orgs/${orgId}/${item.href}`;
               const active = pathname.startsWith(href);
               return (

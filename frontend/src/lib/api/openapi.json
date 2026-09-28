@@ -309,6 +309,13 @@
             "title": "Organization Name",
             "type": "string"
           },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
           "role": {
             "$ref": "#/components/schemas/MembershipRole"
           }
@@ -316,7 +323,8 @@
         "required": [
           "organization_id",
           "organization_name",
-          "role"
+          "role",
+          "permissions"
         ],
         "title": "MembershipOut",
         "type": "object"
@@ -357,6 +365,26 @@
         ],
         "title": "OrganizationOut",
         "type": "object"
+      },
+      "Permission": {
+        "enum": [
+          "organization:read",
+          "departments:read",
+          "departments:manage",
+          "members:read",
+          "members:manage",
+          "requests:create",
+          "requests:read",
+          "requests:read_all",
+          "requests:comment",
+          "requests:assign",
+          "requests:claim",
+          "requests:work",
+          "requests:work_any",
+          "requests:cancel_any"
+        ],
+        "title": "Permission",
+        "type": "string"
       },
       "PersonOut": {
         "properties": {
