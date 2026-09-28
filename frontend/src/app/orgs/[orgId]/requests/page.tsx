@@ -75,7 +75,7 @@ function RequestsView() {
         <EmptyState filtered={hasFilters(filters)} onClear={() => setFilters(NO_FILTERS)} />
       ) : (
         <>
-          <RequestTable requests={items} />
+          <RequestTable orgId={organizationId} requests={items} />
           {requests.hasNextPage && (
             <div className="flex justify-center">
               <Button

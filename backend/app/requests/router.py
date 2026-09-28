@@ -31,6 +31,21 @@ def _viewer(context: TenantContext) -> service.Viewer:
     return service.viewer_for(context.membership)
 
 
+async def _to_out(
+    session: SessionDep, context: TenantContext, rows: list[service.RequestRow]
+) -> list[RequestOut]:
+    actor = await lifecycle.load_actor(session, context.membership)  # once, not per row
+    return [
+        RequestOut.from_row(row, lifecycle.allowed_actions(row.request, actor)) for row in rows
+    ]
+
+
+async def _one_out(
+    session: SessionDep, context: TenantContext, row: service.RequestRow
+) -> RequestOut:
+    return (await _to_out(session, context, [row]))[0]
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_request(
     body: CreateRequestBody,
@@ -46,7 +61,7 @@ async def create_request(
         description=body.description,
         priority=body.priority,
     )
-    return RequestOut.from_row(row)
+    return await _one_out(session, context, row)
 
 
 @router.get("")
@@ -70,7 +85,7 @@ async def list_requests(
         after=decode_cursor(cursor) if cursor else None,
     )
     return RequestPage(
-        items=[RequestOut.from_row(row) for row in rows],
+        items=await _to_out(session, context, rows),
         next_cursor=encode_cursor(next_cursor) if next_cursor else None,
     )
 
@@ -82,7 +97,7 @@ async def get_request(
     session: SessionDep,
 ) -> RequestOut:
     row = await service.get_request(session, context.organization_id, request_id, _viewer(context))
-    return RequestOut.from_row(row)
+    return await _one_out(session, context, row)
 
 
 @router.get("/{request_id}/events")
@@ -110,7 +125,7 @@ async def assign_request(
     row = await lifecycle.assign(
         session, context.organization_id, request_id, context.membership, body.assignee_membership_id
     )
-    return RequestOut.from_row(row)
+    return await _one_out(session, context, row)
 
 
 @router.post("/{request_id}/claim")
@@ -118,7 +133,7 @@ async def claim_request(
     request_id: uuid.UUID, context: RequestReader, session: SessionDep  # type: ignore[valid-type]
 ) -> RequestOut:
     row = await lifecycle.claim(session, context.organization_id, request_id, context.membership)
-    return RequestOut.from_row(row)
+    return await _one_out(session, context, row)
 
 
 @router.post("/{request_id}/unassign")
@@ -126,7 +141,7 @@ async def unassign_request(
     request_id: uuid.UUID, context: RequestReader, session: SessionDep  # type: ignore[valid-type]
 ) -> RequestOut:
     row = await lifecycle.unassign(session, context.organization_id, request_id, context.membership)
-    return RequestOut.from_row(row)
+    return await _one_out(session, context, row)
 
 
 @router.post("/{request_id}/start")
@@ -134,7 +149,7 @@ async def start_request(
     request_id: uuid.UUID, context: RequestReader, session: SessionDep  # type: ignore[valid-type]
 ) -> RequestOut:
     row = await lifecycle.start(session, context.organization_id, request_id, context.membership)
-    return RequestOut.from_row(row)
+    return await _one_out(session, context, row)
 
 
 @router.post("/{request_id}/complete")
@@ -142,7 +157,7 @@ async def complete_request(
     request_id: uuid.UUID, context: RequestReader, session: SessionDep  # type: ignore[valid-type]
 ) -> RequestOut:
     row = await lifecycle.complete(session, context.organization_id, request_id, context.membership)
-    return RequestOut.from_row(row)
+    return await _one_out(session, context, row)
 
 
 @router.post("/{request_id}/cancel")
@@ -150,4 +165,4 @@ async def cancel_request(
     request_id: uuid.UUID, context: RequestReader, session: SessionDep  # type: ignore[valid-type]
 ) -> RequestOut:
     row = await lifecycle.cancel(session, context.organization_id, request_id, context.membership)
-    return RequestOut.from_row(row)
+    return await _one_out(session, context, row)

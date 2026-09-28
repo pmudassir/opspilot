@@ -38,7 +38,7 @@ export default function NewRequestPage() {
         department_id: String(form.get("department_id")),
         priority: String(form.get("priority")) as RequestPriority,
       },
-      { onSuccess: () => router.push(listHref) },
+      { onSuccess: (created) => router.push(`${listHref}/${created.id}`) },
     );
   }
 

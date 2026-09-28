@@ -548,6 +548,11 @@ export interface components {
              */
             membership_id: string;
         };
+        /**
+         * RequestAction
+         * @enum {string}
+         */
+        RequestAction: "assign" | "claim" | "unassign" | "start" | "complete" | "cancel";
         /** RequestEventOut */
         RequestEventOut: {
             actor: components["schemas"]["PersonOut"];
@@ -576,6 +581,8 @@ export interface components {
         RequestEventType: "created" | "assigned" | "unassigned" | "status_changed";
         /** RequestOut */
         RequestOut: {
+            /** Allowed Actions */
+            allowed_actions: components["schemas"]["RequestAction"][];
             /** Assigned At */
             assigned_at: string | null;
             assignee: components["schemas"]["PersonOut"] | null;

@@ -1,10 +1,13 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, type Schemas, unwrap } from "@/lib/api/client";
+import { api, ApiError, type Schemas, unwrap } from "@/lib/api/client";
 
 export type RequestItem = Schemas["RequestOut"];
 export type RequestStatus = Schemas["RequestStatus"];
 export type RequestPriority = Schemas["RequestPriority"];
+export type RequestAction = Schemas["RequestAction"];
+export type RequestEvent = Schemas["RequestEventOut"];
+export type Comment = Schemas["CommentOut"];
 
 // Records keyed by the generated union types: adding a status in the backend makes these
 // fail to compile until the frontend handles it.
@@ -73,6 +76,11 @@ export function hasFilters(filters: RequestFilters): boolean {
 export const requestKeys = {
   all: (orgId: string) => ["requests", orgId] as const,
   list: (orgId: string, filters: RequestFilters) => ["requests", orgId, "list", filters] as const,
+  detail: (orgId: string, requestId: string) => ["requests", orgId, "detail", requestId] as const,
+  events: (orgId: string, requestId: string) =>
+    ["requests", orgId, "detail", requestId, "events"] as const,
+  comments: (orgId: string, requestId: string) =>
+    ["requests", orgId, "detail", requestId, "comments"] as const,
 };
 
 export function useRequests(orgId: string, filters: RequestFilters) {
@@ -107,5 +115,118 @@ export function useCreateRequest(orgId: string) {
       ),
     // Every filtered list of this org may now be out of date.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: requestKeys.all(orgId) }),
+  });
+}
+
+function requestPath(orgId: string, requestId: string) {
+  return { path: { org_id: orgId, request_id: requestId } };
+}
+
+export function useRequest(orgId: string, requestId: string) {
+  return useQuery({
+    queryKey: requestKeys.detail(orgId, requestId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/orgs/{org_id}/requests/{request_id}", {
+          params: requestPath(orgId, requestId),
+        }),
+      ),
+  });
+}
+
+export function useRequestEvents(orgId: string, requestId: string) {
+  return useQuery({
+    queryKey: requestKeys.events(orgId, requestId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/orgs/{org_id}/requests/{request_id}/events", {
+          params: requestPath(orgId, requestId),
+        }),
+      ),
+  });
+}
+
+export function useComments(orgId: string, requestId: string) {
+  return useQuery({
+    queryKey: requestKeys.comments(orgId, requestId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/orgs/{org_id}/requests/{request_id}/comments", {
+          params: requestPath(orgId, requestId),
+        }),
+      ),
+  });
+}
+
+export function useAddComment(orgId: string, requestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) =>
+      unwrap(
+        api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/comments", {
+          params: requestPath(orgId, requestId),
+          body: { body },
+        }),
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: requestKeys.comments(orgId, requestId) }),
+  });
+}
+
+export const ACTION_LABELS: Record<RequestAction, string> = {
+  claim: "Claim",
+  start: "Start work",
+  complete: "Mark complete",
+  assign: "Assign",
+  unassign: "Unassign",
+  cancel: "Cancel request",
+};
+
+type ActionInput = { action: RequestAction; assigneeMembershipId?: string };
+
+function performAction(orgId: string, requestId: string, { action, assigneeMembershipId }: ActionInput) {
+  const params = requestPath(orgId, requestId);
+  switch (action) {
+    case "assign":
+      if (!assigneeMembershipId) throw new Error("assign requires an assignee");
+      return unwrap(
+        api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/assign", {
+          params,
+          body: { assignee_membership_id: assigneeMembershipId },
+        }),
+      );
+    case "claim":
+      return unwrap(api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/claim", { params }));
+    case "unassign":
+      return unwrap(api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/unassign", { params }));
+    case "start":
+      return unwrap(api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/start", { params }));
+    case "complete":
+      return unwrap(api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/complete", { params }));
+    case "cancel":
+      return unwrap(api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/cancel", { params }));
+    default: {
+      const unhandled: never = action;
+      throw new Error(`Unknown action ${String(unhandled)}`);
+    }
+  }
+}
+
+export function useRequestAction(orgId: string, requestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ActionInput) => performAction(orgId, requestId, input),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(requestKeys.detail(orgId, requestId), updated);
+      // Lists, this request's timeline and allowed actions all changed.
+      void queryClient.invalidateQueries({ queryKey: requestKeys.all(orgId) });
+    },
+    onError: (error) => {
+      // 409: someone else changed the request first. Reload so the page shows the
+      // current state and the actions that are valid now.
+      if (error instanceof ApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: requestKeys.detail(orgId, requestId) });
+      }
+    },
   });
 }

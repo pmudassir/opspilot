@@ -335,3 +335,81 @@ async def test_cancel_racing_assign_leaves_a_consistent_request(
     events = await team.events()
     assert len(events) == 2  # created + exactly one of (cancelled, assigned)
     assert final["status"] == events[-1]["to_status"]
+
+
+# --- allowed_actions: what the UI shows must equal what the API permits ----------
+
+LIFECYCLE_ACTIONS = ["assign", "claim", "unassign", "start", "complete", "cancel"]
+
+
+async def request_in_state(team: Team, state: str) -> str:
+    """A fresh IT request reported by Mia, driven to `state` (assigned to Agent)."""
+    department_id = (await team.request())["department"]["id"]
+    request_id = await create_request_id(team.clients["mia"], team.org_id, department_id)
+    steps = {
+        "open": [],
+        "assigned": [("manager", "assign")],
+        "in_progress": [("manager", "assign"), ("agent", "start")],
+        "completed": [("manager", "assign"), ("agent", "start"), ("agent", "complete")],
+    }[state]
+    for who, action in steps:
+        body = {"assignee_membership_id": team.ids["agent"]} if action == "assign" else None
+        response = await act(team.clients[who], team.org_id, request_id, action, body)
+        assert response.status_code == 200, response.text
+    return request_id
+
+
+def client_for(team: Team, who: str) -> AsyncClient:
+    return team.admin if who == "admin" else team.clients[who]
+
+
+async def advertised(team: Team, who: str, request_id: str) -> list[str]:
+    url = org_url(team.org_id, f"/requests/{request_id}")
+    return (await client_for(team, who).get(url)).json()["allowed_actions"]
+
+
+@pytest.mark.parametrize(
+    ("state", "who", "expected"),
+    [
+        ("open", "mia", ["cancel"]),  # requester, while open
+        ("open", "agent", ["claim"]),  # in the department
+        ("open", "hk_agent", []),  # different department
+        ("open", "manager", ["assign", "claim", "cancel"]),  # manager is also in IT
+        ("open", "admin", ["assign", "cancel"]),  # admin isn't in IT: can't claim
+        ("assigned", "agent", ["start"]),  # the assignee
+        ("assigned", "agent2", []),  # same department, not the assignee
+        ("assigned", "mia", []),  # requester can't cancel once assigned
+        ("in_progress", "manager", ["assign", "unassign", "complete", "cancel"]),
+        ("completed", "admin", []),
+    ],
+)
+async def test_allowed_actions_examples(team: Team, state: str, who: str, expected: list[str]) -> None:
+    request_id = await request_in_state(team, state)
+
+    assert await advertised(team, who, request_id) == expected
+
+
+@pytest.mark.parametrize("state", ["open", "assigned", "in_progress", "completed"])
+@pytest.mark.parametrize("who", ["mia", "agent", "agent2", "hk_agent", "manager", "admin"])
+async def test_allowed_actions_are_exactly_what_the_api_permits(
+    team: Team, state: str, who: str
+) -> None:
+    """For every (state, user): an action succeeds if and only if it was advertised.
+    Each attempt runs on its own fresh request so attempts don't affect each other."""
+    listed = set(await advertised(team, who, await request_in_state(team, state)))
+
+    for action in LIFECYCLE_ACTIONS:
+        request_id = await request_in_state(team, state)
+        body = {"assignee_membership_id": team.ids["agent2"]} if action == "assign" else None
+        response = await act(client_for(team, who), team.org_id, request_id, action, body)
+
+        assert (response.status_code == 200) == (action in listed), (
+            f"{who} → {action} on {state}: advertised={sorted(listed)}, "
+            f"got {response.status_code} {response.text}"
+        )
+
+
+async def test_list_items_carry_allowed_actions(team: Team) -> None:
+    items = (await team.clients["agent"].get(org_url(team.org_id, "/requests"))).json()["items"]
+
+    assert [item["allowed_actions"] for item in items] == [["claim"]]

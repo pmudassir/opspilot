@@ -4,6 +4,7 @@ from typing import Annotated, Any, Self
 
 from pydantic import BaseModel, StringConstraints
 
+from app.requests.lifecycle import RequestAction
 from app.requests.models import (
     REQUEST_DESCRIPTION_MAX_LENGTH,
     REQUEST_TITLE_MAX_LENGTH,
@@ -53,9 +54,12 @@ class RequestOut(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     cancelled_at: datetime | None
+    # What the *current caller* may do now, computed by the same rules that enforce
+    # each action. The UI renders buttons from this; the API still checks every call.
+    allowed_actions: list[RequestAction]
 
     @classmethod
-    def from_row(cls, row: RequestRow) -> Self:
+    def from_row(cls, row: RequestRow, allowed_actions: list[RequestAction]) -> Self:
         request = row.request
         assignee = (
             PersonOut(membership_id=request.assignee_membership_id, full_name=row.assignee_name)
@@ -79,6 +83,7 @@ class RequestOut(BaseModel):
             started_at=request.started_at,
             completed_at=request.completed_at,
             cancelled_at=request.cancelled_at,
+            allowed_actions=allowed_actions,
         )
 
 

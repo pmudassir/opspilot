@@ -4,9 +4,14 @@ Each action: load the request as the actor sees it (404) → role may ever do th
 → current state allows it (409) → object-level rule (403) → compare-and-set UPDATE
 that only succeeds if the row still has the state we authorized against (else 409)
 → history event → commit, all in one transaction.
+
+The checks are pure functions returning the reason an action is *not* allowed.
+Enforcement raises that reason; `allowed_actions()` lists actions without one, so the
+UI's buttons and the API's enforcement can never disagree.
 """
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -15,7 +20,7 @@ from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.departments.models import DepartmentMember
-from app.errors import ConflictError, ForbiddenError, UnprocessableError
+from app.errors import ConflictError, DomainError, ForbiddenError, UnprocessableError
 from app.organizations.models import Membership, MembershipRole, MembershipStatus
 from app.permissions import Permission, has_permission
 from app.requests.models import Request, RequestEventType, RequestStatus
@@ -82,36 +87,121 @@ class ConcurrentChangeError(ConflictError):
         super().__init__("The request was changed by someone else. Reload and try again.")
 
 
-def _require(allowed: bool, message: str) -> None:
-    if not allowed:
-        raise ForbiddenError(message)
+@dataclass(frozen=True)
+class Actor:
+    """The acting membership plus what object-level rules need (its departments)."""
+
+    membership_id: uuid.UUID
+    role: MembershipRole
+    department_ids: frozenset[uuid.UUID]
+
+    def can(self, permission: Permission) -> bool:
+        return has_permission(self.role, permission)
 
 
-def _check_state(request: Request, action: RequestAction) -> None:
+async def load_actor(session: AsyncSession, membership: Membership) -> Actor:
+    """One query per HTTP request (not per listed row)."""
+    department_ids = await session.scalars(
+        select(DepartmentMember.department_id).where(
+            DepartmentMember.organization_id == membership.organization_id,
+            DepartmentMember.membership_id == membership.id,
+        )
+    )
+    return Actor(membership.id, membership.role, frozenset(department_ids))
+
+
+# --- rules: each returns why the action is NOT allowed, or None ------------------
+
+
+def _state_violation(request: Request, action: RequestAction) -> DomainError | None:
     if request.status not in TRANSITIONS[action].from_statuses:
-        raise InvalidTransitionError(action, request.status)
+        return InvalidTransitionError(action, request.status)
+    return None
+
+
+def _assign_violation(request: Request, actor: Actor, action: RequestAction) -> DomainError | None:
+    if not actor.can(Permission.REQUESTS_ASSIGN):
+        return ForbiddenError(f"Only managers and admins can {action} requests")
+    return _state_violation(request, action)
+
+
+def _claim_violation(request: Request, actor: Actor, action: RequestAction) -> DomainError | None:
+    if not actor.can(Permission.REQUESTS_CLAIM):
+        return ForbiddenError("Only staff can claim requests")
+    if violation := _state_violation(request, action):
+        return violation
+    if request.department_id not in actor.department_ids:
+        return ForbiddenError("You can only claim requests in your own departments")
+    return None
+
+
+def _work_violation(request: Request, actor: Actor, action: RequestAction) -> DomainError | None:
+    if not actor.can(Permission.REQUESTS_WORK):
+        return ForbiddenError(f"Only staff can {action} requests")
+    if violation := _state_violation(request, action):
+        return violation
+    if not (
+        actor.can(Permission.REQUESTS_WORK_ANY)
+        or request.assignee_membership_id == actor.membership_id
+    ):
+        return ForbiddenError(f"Only the assignee can {action} this request")
+    return None
+
+
+def _cancel_violation(request: Request, actor: Actor, action: RequestAction) -> DomainError | None:
+    if violation := _state_violation(request, action):
+        return violation
+    is_own_open_request = (
+        request.requester_membership_id == actor.membership_id
+        and request.status == RequestStatus.OPEN
+    )
+    if not (actor.can(Permission.REQUESTS_CANCEL_ANY) or is_own_open_request):
+        return ForbiddenError(
+            "Requesters can only cancel their own requests while they are still open"
+        )
+    return None
+
+
+_RULES: dict[RequestAction, Callable[[Request, Actor, RequestAction], DomainError | None]] = {
+    RequestAction.ASSIGN: _assign_violation,
+    RequestAction.CLAIM: _claim_violation,
+    RequestAction.UNASSIGN: _assign_violation,
+    RequestAction.START: _work_violation,
+    RequestAction.COMPLETE: _work_violation,
+    RequestAction.CANCEL: _cancel_violation,
+}
+
+
+def check(action: RequestAction, request: Request, actor: Actor) -> None:
+    """Raise the reason this actor may not perform this action now (403/409)."""
+    if violation := _RULES[action](request, actor, action):
+        raise violation
+
+
+def allowed_actions(request: Request, actor: Actor) -> list[RequestAction]:
+    """What the actor may do to this request right now (drives the UI's buttons)."""
+    return [action for action in RequestAction if _RULES[action](request, actor, action) is None]
+
+
+# --- execution ------------------------------------------------------------------
 
 
 async def _load(
-    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, actor: Membership
+    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> Request:
-    return (await get_request(session, organization_id, request_id, viewer_for(actor))).request
+    return (await get_request(session, organization_id, request_id, viewer_for(membership))).request
 
 
-async def _in_department(
+async def _authorize(
     session: AsyncSession,
     organization_id: uuid.UUID,
-    department_id: uuid.UUID,
-    membership_id: uuid.UUID,
-) -> bool:
-    found = await session.scalar(
-        select(DepartmentMember.membership_id).where(
-            DepartmentMember.organization_id == organization_id,
-            DepartmentMember.department_id == department_id,
-            DepartmentMember.membership_id == membership_id,
-        )
-    )
-    return found is not None
+    request_id: uuid.UUID,
+    membership: Membership,
+    action: RequestAction,
+) -> Request:
+    request = await _load(session, organization_id, request_id, membership)  # 404
+    check(action, request, await load_actor(session, membership))  # 403 / 409
+    return request
 
 
 async def _validate_assignee(
@@ -136,9 +226,14 @@ async def _validate_assignee(
         raise UnprocessableError("Assignee is deactivated")
     if membership.role == MembershipRole.MEMBER:
         raise UnprocessableError("Assignee must be staff (agent, manager or admin)")
-    if not await _in_department(
-        session, request.organization_id, request.department_id, assignee_membership_id
-    ):
+    in_department = await session.scalar(
+        select(DepartmentMember.membership_id).where(
+            DepartmentMember.organization_id == request.organization_id,
+            DepartmentMember.department_id == request.department_id,
+            DepartmentMember.membership_id == assignee_membership_id,
+        )
+    )
+    if in_department is None:
         raise UnprocessableError("Assignee must belong to the request's department")
     return full_name
 
@@ -170,7 +265,7 @@ async def _compare_and_set(
 async def _apply(
     session: AsyncSession,
     request: Request,
-    actor: Membership,
+    membership: Membership,
     action: RequestAction,
     *,
     assignee_membership_id: uuid.UUID | None,
@@ -188,37 +283,32 @@ async def _apply(
     record_event(
         session,
         request,
-        actor_membership_id=actor.id,
+        actor_membership_id=membership.id,
         event_type=transition.event_type,
         from_status=request.status,
         to_status=transition.to_status,
         data=data,
     )
     await session.commit()
-    return await get_request(session, request.organization_id, request.id, viewer_for(actor))
+    return await get_request(session, request.organization_id, request.id, viewer_for(membership))
 
 
 async def assign(
     session: AsyncSession,
     organization_id: uuid.UUID,
     request_id: uuid.UUID,
-    actor: Membership,
+    membership: Membership,
     assignee_membership_id: uuid.UUID,
 ) -> RequestRow:
-    request = await _load(session, organization_id, request_id, actor)
-    _require(
-        has_permission(actor.role, Permission.REQUESTS_ASSIGN),
-        "Only managers and admins can assign requests",
-    )
-    _check_state(request, RequestAction.ASSIGN)
+    request = await _authorize(session, organization_id, request_id, membership, RequestAction.ASSIGN)
     if request.assignee_membership_id == assignee_membership_id:
         # Idempotent: already assigned to this person (a retry, or a double click).
-        return await get_request(session, organization_id, request_id, viewer_for(actor))
+        return await get_request(session, organization_id, request_id, viewer_for(membership))
     assignee_name = await _validate_assignee(session, request, assignee_membership_id)
     return await _apply(
         session,
         request,
-        actor,
+        membership,
         RequestAction.ASSIGN,
         assignee_membership_id=assignee_membership_id,
         data={
@@ -232,92 +322,63 @@ async def assign(
 
 
 async def claim(
-    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, actor: Membership
+    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    request = await _load(session, organization_id, request_id, actor)
-    _require(has_permission(actor.role, Permission.REQUESTS_CLAIM), "Only staff can claim requests")
-    _check_state(request, RequestAction.CLAIM)
-    _require(
-        await _in_department(session, organization_id, request.department_id, actor.id),
-        "You can only claim requests in your own departments",
-    )
+    request = await _authorize(session, organization_id, request_id, membership, RequestAction.CLAIM)
     return await _apply(
         session,
         request,
-        actor,
+        membership,
         RequestAction.CLAIM,
-        assignee_membership_id=actor.id,
-        data={"assignee_membership_id": str(actor.id), "claimed": True},
+        assignee_membership_id=membership.id,
+        data={"assignee_membership_id": str(membership.id), "claimed": True},
     )
 
 
 async def unassign(
-    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, actor: Membership
+    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    request = await _load(session, organization_id, request_id, actor)
-    _require(
-        has_permission(actor.role, Permission.REQUESTS_ASSIGN),
-        "Only managers and admins can unassign requests",
+    request = await _authorize(
+        session, organization_id, request_id, membership, RequestAction.UNASSIGN
     )
-    _check_state(request, RequestAction.UNASSIGN)
     return await _apply(
         session,
         request,
-        actor,
+        membership,
         RequestAction.UNASSIGN,
         assignee_membership_id=None,
         data={"previous_assignee_membership_id": str(request.assignee_membership_id)},
     )
 
 
-async def _work(
+async def _keep_assignee(
     session: AsyncSession,
     organization_id: uuid.UUID,
     request_id: uuid.UUID,
-    actor: Membership,
+    membership: Membership,
     action: RequestAction,
 ) -> RequestRow:
-    request = await _load(session, organization_id, request_id, actor)
-    _require(has_permission(actor.role, Permission.REQUESTS_WORK), f"Only staff can {action} requests")
-    _check_state(request, action)
-    _require(
-        has_permission(actor.role, Permission.REQUESTS_WORK_ANY)
-        or request.assignee_membership_id == actor.id,
-        f"Only the assignee can {action} this request",
-    )
+    request = await _authorize(session, organization_id, request_id, membership, action)
     return await _apply(
-        session, request, actor, action, assignee_membership_id=request.assignee_membership_id
+        session, request, membership, action, assignee_membership_id=request.assignee_membership_id
     )
 
 
 async def start(
-    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, actor: Membership
+    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    return await _work(session, organization_id, request_id, actor, RequestAction.START)
+    return await _keep_assignee(session, organization_id, request_id, membership, RequestAction.START)
 
 
 async def complete(
-    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, actor: Membership
+    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    return await _work(session, organization_id, request_id, actor, RequestAction.COMPLETE)
+    return await _keep_assignee(
+        session, organization_id, request_id, membership, RequestAction.COMPLETE
+    )
 
 
 async def cancel(
-    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, actor: Membership
+    session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    request = await _load(session, organization_id, request_id, actor)
-    _check_state(request, RequestAction.CANCEL)
-    is_own_open_request = (
-        request.requester_membership_id == actor.id and request.status == RequestStatus.OPEN
-    )
-    _require(
-        has_permission(actor.role, Permission.REQUESTS_CANCEL_ANY) or is_own_open_request,
-        "Requesters can only cancel their own requests while they are still open",
-    )
-    return await _apply(
-        session,
-        request,
-        actor,
-        RequestAction.CANCEL,
-        assignee_membership_id=request.assignee_membership_id,
-    )
+    return await _keep_assignee(session, organization_id, request_id, membership, RequestAction.CANCEL)

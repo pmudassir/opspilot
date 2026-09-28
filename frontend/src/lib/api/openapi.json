@@ -377,6 +377,18 @@
         "title": "PersonOut",
         "type": "object"
       },
+      "RequestAction": {
+        "enum": [
+          "assign",
+          "claim",
+          "unassign",
+          "start",
+          "complete",
+          "cancel"
+        ],
+        "title": "RequestAction",
+        "type": "string"
+      },
       "RequestEventOut": {
         "properties": {
           "actor": {
@@ -445,6 +457,13 @@
       },
       "RequestOut": {
         "properties": {
+          "allowed_actions": {
+            "items": {
+              "$ref": "#/components/schemas/RequestAction"
+            },
+            "title": "Allowed Actions",
+            "type": "array"
+          },
           "assigned_at": {
             "anyOf": [
               {
@@ -553,7 +572,8 @@
           "assigned_at",
           "started_at",
           "completed_at",
-          "cancelled_at"
+          "cancelled_at",
+          "allowed_actions"
         ],
         "title": "RequestOut",
         "type": "object"

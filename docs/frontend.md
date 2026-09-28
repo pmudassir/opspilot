@@ -22,7 +22,13 @@
 | `/login`, `/signup` | Public. `useSearchParams` wrapped in `<Suspense>` (Next.js requirement) |
 | `/orgs/[orgId]/*` | `AppShell`: requires session + membership of `orgId`; provides `useCurrentOrg()` (role for UI only) |
 | `/orgs/[orgId]/requests` | List: filters in the URL, "Load more" via cursor (`useInfiniteQuery`), loading/empty/filtered-empty/error states |
-| `/orgs/[orgId]/requests/new` | Create form (department required, priority default normal); 422s shown per field |
+| `/orgs/[orgId]/requests/new` | Create form (department required, priority default normal); 422s shown per field; opens the new request |
+| `/orgs/[orgId]/requests/[requestId]` | Detail: description, activity timeline (events + comments), comment form, actions panel, details/timestamps; 404 → "doesn't exist or no access" |
+
+## Actions come from the API
+- Every `RequestOut` carries `allowed_actions`, computed by the backend's lifecycle rules for the *caller* (`app/requests/lifecycle.py`). The actions panel renders only those; no role logic in the frontend.
+- A stale page can still offer an action that's no longer valid (someone acted first). The API answers 409/403; the UI shows the message and refetches the request, so the buttons update to what's valid now.
+- Assign uses an inline picker of active staff in the request's department (`GET /departments/{id}/members`, available to managers/admins, who are the only ones offered "Assign"). Cancel has an inline two-step confirmation.
 
 ## Request list details
 - **Filters live in the URL** (`?status=open&status=assigned&department_id=…&priority=urgent`): shareable, reload-safe. `parseFilters()` treats the URL as untrusted input (unknown statuses, non-UUID department ids and bad priorities are dropped).
@@ -37,3 +43,5 @@
 - `@types/node` must match the Node runtime (24). The scaffold's `^20` blocked Vitest 5; fixed the version rather than forcing with `--legacy-peer-deps`.
 - Next.js renders a hidden `role="alert"` route announcer. Browser tests must target our error box, not any alert.
 - `@playwright/test` is pinned to 1.60.0 to match the locally cached Chromium build.
+- When checking UI locally, make sure *your* server is the one answering: a dev server already on :3000/:8000 silently took the ports. Use other ports (`API_ORIGIN`, `ALLOWED_ORIGINS`) for scripted checks.
+- In browser checks, use auto-retrying assertions (`expect(...).toHaveValue(...)`) instead of reading state right after an action. The UI updates in more than one render.

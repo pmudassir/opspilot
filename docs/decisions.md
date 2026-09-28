@@ -93,3 +93,8 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** one source of truth. A renamed field breaks the frontend build, not production.
 - **Alternatives:** hand-written TS types (drift silently); a shared schema language (overkill for one backend).
 - **Revisit when:** multiple clients or public API versioning.
+
+## ADR-019: The API tells the client which actions it may take (`allowed_actions`)
+- **Why:** the lifecycle rules (role, state, assignee, requester-while-open, department) are subtle; re-implementing them in the frontend would drift. The same pure rule functions both enforce actions and compute `allowed_actions`. A property test attempts every action for every (state, user) and asserts success ⇔ advertised.
+- **Alternatives:** frontend derives buttons from role/status (duplicated business logic); show all buttons and rely on errors (poor UX).
+- **Revisit when:** a client needs the *reason* an action is unavailable (return reasons alongside).
