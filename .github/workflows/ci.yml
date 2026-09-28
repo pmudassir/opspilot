@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch/PR supersedes the running checks.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: opspilot
+          POSTGRES_PASSWORD: opspilot
+          POSTGRES_DB: opspilot_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U opspilot -d opspilot_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://opspilot:opspilot@localhost:5432/opspilot_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install dependencies (lockfile must be up to date)
+        run: uv sync --frozen
+      - name: Lint (unused imports, import order)
+        run: uvx ruff check --select F,I app tests scripts
+      - name: Tests (includes migration drift + OpenAPI snapshot checks)
+        run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: opspilot
+          POSTGRES_PASSWORD: opspilot
+          POSTGRES_DB: opspilot
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U opspilot -d opspilot"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      E2E_DATABASE_URL: postgresql+asyncpg://opspilot:opspilot@localhost:5432/opspilot_e2e
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests (own servers on :3001/:8001, opspilot_e2e database)
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7

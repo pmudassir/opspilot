@@ -30,3 +30,10 @@ npm run typecheck && npm run lint && npm test
 npx playwright install chromium      # first time only (skip if already cached)
 npm run test:e2e                     # own servers on :3001/:8001 + opspilot_e2e DB; dev servers untouched
 ```
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+`backend` (Postgres service, `uv sync --frozen`, Ruff, pytest incl. migration-drift and OpenAPI-snapshot checks),
+`frontend` (`npm ci`, typecheck, lint, Vitest, build) and `e2e` (Playwright against its own servers and database;
+the report is uploaded as an artifact on failure).
