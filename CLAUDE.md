@@ -4,7 +4,15 @@ Multi-tenant operations platform: organizations capture, route, assign, and trac
 This is a **learning-focused** project: explain significant concepts, ask 3–5 check questions after each feature (withhold answers).
 
 ## Current phase
-Phase 1 — backend foundation (FastAPI, PostgreSQL, SQLAlchemy 2 async, Alembic, pytest). See `docs/`.
+Phase 2 — V1 frontend (`frontend/`: Next.js 16 App Router, TypeScript, Tailwind, TanStack Query).
+Phase 1 backend is complete. See `docs/`.
+
+## Frontend rules
+- Next.js 16 has breaking changes: read `frontend/node_modules/next/dist/docs/` before using an API.
+- UI is thin: no business rules. Which actions a user may take comes from the API, never re-derived.
+- API types are generated: after any backend API change run `npm run gen:api` in `frontend/`
+  (backend test `test_openapi_snapshot.py` fails otherwise).
+- Frontend checks: `npm run typecheck && npm run lint && npm run build`.
 
 ## Hard rules
 - **No AI features in the product yet**: no LLM APIs, LangGraph, RAG, embeddings, pgvector, agents, MCP.
@@ -20,5 +28,5 @@ Phase 1 — backend foundation (FastAPI, PostgreSQL, SQLAlchemy 2 async, Alembic
 - Never edit an applied Alembic migration.
 
 ## Docs (keep concise, update when decisions change)
-- `docs/architecture.md`, `docs/database.md`, `docs/multi-tenancy.md`, `docs/authentication.md`
+- `docs/frontend.md`, `docs/architecture.md`, `docs/database.md`, `docs/multi-tenancy.md`, `docs/authentication.md`
 - `docs/decisions.md`: short ADRs

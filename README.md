@@ -15,3 +15,15 @@ uv run pytest                      # tests run against opspilot_test
 uv run uvicorn app.main:app --reload
 curl localhost:8000/health         # {"status":"ok","database":"ok"}
 ```
+
+## Frontend — local setup
+
+Requires Node 20+. The backend must be running on port 8000.
+
+```bash
+cd frontend
+npm install
+npm run dev                        # http://localhost:3000 (proxies /api to :8000)
+npm run gen:api                    # after backend API changes: regenerate TS types
+npm run typecheck && npm run lint
+```

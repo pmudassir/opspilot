@@ -78,3 +78,18 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** each action has distinct authorization and body; `POST …/assign`, `…/claim` make rules explicit and discoverable in OpenAPI.
 - **Alternatives:** `PATCH /requests/{id} {status}` (generic, hides which transitions and rules exist).
 - **Revisit when:** never expected; new actions add endpoints plus a row in `TRANSITIONS`.
+
+## ADR-016: Client-side data fetching with TanStack Query, via a same-origin proxy
+- **Why:** a logged-in ops tool gains nothing from SSR/SEO; the browser sends the session cookie itself, so auth needs no server-side cookie forwarding. TanStack Query handles caching, loading/error states and invalidation after mutations.
+- **Alternatives:** Server Components + Server Actions (forward the cookie server-side, two network hops, more caching layers); `fetch` in `useEffect` (race conditions, stale data).
+- **Revisit when:** public/SEO pages appear, or first-load performance matters enough to render data on the server.
+
+## ADR-017: Tailwind CSS with a few hand-built UI primitives
+- **Why:** small surface we fully understand (button, field, feedback); avoids a generic component-library look and dependency sprawl.
+- **Alternatives:** shadcn/ui (faster polished widgets, more files/deps); CSS Modules (no framework, verbose).
+- **Revisit when:** we need complex accessible widgets (combobox, date picker): adopt headless primitives for those only.
+
+## ADR-018: Frontend API types generated from the backend's OpenAPI schema
+- **Why:** one source of truth. A renamed field breaks the frontend build, not production.
+- **Alternatives:** hand-written TS types (drift silently); a shared schema language (overkill for one backend).
+- **Revisit when:** multiple clients or public API versioning.
