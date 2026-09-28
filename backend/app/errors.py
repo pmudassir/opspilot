@@ -12,6 +12,12 @@ class DomainError(Exception):
         self.detail = detail
 
 
+class ForbiddenError(DomainError):
+    """The caller can see the object but may not perform this action on it."""
+
+    status_code = status.HTTP_403_FORBIDDEN
+
+
 class NotFoundError(DomainError):
     status_code = status.HTTP_404_NOT_FOUND
 

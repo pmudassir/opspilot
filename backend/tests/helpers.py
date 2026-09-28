@@ -104,3 +104,14 @@ async def create_request_id(
     response = await create_request(client, org_id, department_id, title=title)
     assert response.status_code == 201, response.text
     return response.json()["id"]
+
+
+async def act(
+    client: AsyncClient,
+    org_id: str,
+    request_id: str,
+    action: str,
+    json: dict[str, str] | None = None,
+) -> Response:
+    """POST a lifecycle action (assign/claim/unassign/start/complete/cancel)."""
+    return await client.post(org_url(org_id, f"/requests/{request_id}/{action}"), json=json)

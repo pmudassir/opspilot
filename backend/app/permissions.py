@@ -19,6 +19,16 @@ class Permission(StrEnum):
     # Every role may read requests; members only see their own (see REQUESTS_READ_ALL).
     REQUESTS_READ = "requests:read"
     REQUESTS_READ_ALL = "requests:read_all"
+    REQUESTS_COMMENT = "requests:comment"
+    # Assign, reassign and unassign anyone in the request's department.
+    REQUESTS_ASSIGN = "requests:assign"
+    # Take an OPEN request in one of your own departments.
+    REQUESTS_CLAIM = "requests:claim"
+    # Start/complete requests assigned to you; *_ANY lifts the "assigned to you" condition.
+    REQUESTS_WORK = "requests:work"
+    REQUESTS_WORK_ANY = "requests:work_any"
+    # Cancel any non-terminal request (requesters may always cancel their own while OPEN).
+    REQUESTS_CANCEL_ANY = "requests:cancel_any"
 
 
 _EVERYONE = frozenset(
@@ -27,15 +37,26 @@ _EVERYONE = frozenset(
         Permission.DEPARTMENTS_READ,
         Permission.REQUESTS_CREATE,
         Permission.REQUESTS_READ,
+        Permission.REQUESTS_COMMENT,
     }
 )
-_STAFF = _EVERYONE | {Permission.MEMBERS_READ, Permission.REQUESTS_READ_ALL}
+_STAFF = _EVERYONE | {
+    Permission.MEMBERS_READ,
+    Permission.REQUESTS_READ_ALL,
+    Permission.REQUESTS_CLAIM,
+    Permission.REQUESTS_WORK,
+}
+_SUPERVISORS = _STAFF | {
+    Permission.REQUESTS_ASSIGN,
+    Permission.REQUESTS_WORK_ANY,
+    Permission.REQUESTS_CANCEL_ANY,
+}
 
 ROLE_PERMISSIONS: dict[MembershipRole, frozenset[Permission]] = {
     MembershipRole.MEMBER: _EVERYONE,
     MembershipRole.AGENT: _STAFF,
-    MembershipRole.MANAGER: _STAFF,
-    MembershipRole.ADMIN: _STAFF | {Permission.MEMBERS_MANAGE, Permission.DEPARTMENTS_MANAGE},
+    MembershipRole.MANAGER: _SUPERVISORS,
+    MembershipRole.ADMIN: _SUPERVISORS | {Permission.MEMBERS_MANAGE, Permission.DEPARTMENTS_MANAGE},
 }
 
 

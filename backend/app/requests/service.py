@@ -13,6 +13,7 @@ from app.departments.models import Department
 from app.errors import NotFoundError, UnprocessableError
 from app.organizations.models import Membership
 from app.pagination import KeysetCursor
+from app.permissions import Permission, has_permission
 from app.requests.models import (
     Request,
     RequestEvent,
@@ -27,6 +28,13 @@ from app.users.models import User
 class Viewer:
     membership_id: uuid.UUID
     can_read_all: bool
+
+
+def viewer_for(membership: Membership) -> Viewer:
+    return Viewer(
+        membership_id=membership.id,
+        can_read_all=has_permission(membership.role, Permission.REQUESTS_READ_ALL),
+    )
 
 
 class RequestRow(NamedTuple):
@@ -108,7 +116,10 @@ async def _get_row(
 ) -> RequestRow:
     row = (
         await session.execute(
-            _request_rows(organization_id).where(Request.id == request_id, _visible_to(viewer))
+            _request_rows(organization_id)
+            .where(Request.id == request_id, _visible_to(viewer))
+            # Refresh a Request already in the identity map (e.g. after a lifecycle UPDATE).
+            .execution_options(populate_existing=True)
         )
     ).first()
     if row is None:

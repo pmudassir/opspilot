@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.auth.router import router as auth_router
+from app.comments.router import router as comments_router
 from app.csrf import reject_cross_origin_writes
 from app.db import engine
 from app.departments.router import router as departments_router
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(organizations_router)
     app.include_router(departments_router)
     app.include_router(requests_router)
+    app.include_router(comments_router)
     return app
 
 

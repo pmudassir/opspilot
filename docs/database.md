@@ -8,9 +8,10 @@
 | `memberships` | yes | user ↔ org; `role` enum, `status` (active/deactivated); unique (org, user) |
 | `departments` | yes | name unique per org, case-insensitive (`UNIQUE (organization_id, lower(name))`) |
 | `department_members` | yes | membership ↔ department (N:M); PK (department_id, membership_id); composite FKs to both parents |
-| `requests` | yes | department, requester, assignee?, status, priority, title, description. Composite FKs to department/requester/assignee. Lifecycle timestamps arrive in Step 6 |
+| `requests` | yes | department, requester, assignee?, status, priority, title, description; `assigned_at`/`started_at` (first occurrence), `completed_at`, `cancelled_at`, each CHECKed against status. Composite FKs to department/requester/assignee |
 | `comments` | yes | request, author, body |
 | `request_events` | yes | append-only (DB trigger rejects UPDATE/DELETE); typed `from_status`/`to_status`, JSONB `data`; `created_at = clock_timestamp()` so events in one transaction still order correctly |
+| `comments` | yes | request, author, body; immutable in V1; index `(organization_id, request_id, created_at)` |
 | `sessions` | no | hashed session token, user, expiry (see authentication.md) |
 
 Deferred: Task, Invitation, Location, Category, per-org request numbers.
@@ -50,6 +51,8 @@ Request 1──N RequestEvent
 - `tests/test_migrations.py` fails if models change without a migration.
 - Never edit a migration that has been applied anywhere shared.
 - Autogenerate doesn't order *constraints on existing tables* before new FKs that need them. Check the order.
+- Autogenerate does **not** detect CHECK constraints added to existing tables, and `alembic check` won't flag them missing. Write them by hand.
+- Adding a constraint to a table with data: **backfill first**, then add the constraint (see the lifecycle-timestamps migration).
 
 ## Request lifecycle
 ```
@@ -61,4 +64,4 @@ OPEN ──assign/claim──► ASSIGNED ──start──► IN_PROGRESS ─�
 - CHECK constraint: `OPEN` ⇒ no assignee; `ASSIGNED | IN_PROGRESS | COMPLETED` ⇒ assignee required.
 - All transitions go through one service function + transition table.
 - Row update + `RequestEvent` in one transaction.
-- Concurrent assignment handled by conditional update (`WHERE status = expected`) or row lock (Phase 1).
+- Concurrent transitions: compare-and-set on (status, assignee) → 409 on conflict (ADR-014).

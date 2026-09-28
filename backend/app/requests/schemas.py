@@ -24,6 +24,10 @@ class CreateRequestBody(StrictRequest):
     priority: RequestPriority = RequestPriority.NORMAL
 
 
+class AssignBody(StrictRequest):
+    assignee_membership_id: uuid.UUID
+
+
 class PersonOut(BaseModel):
     membership_id: uuid.UUID
     full_name: str
@@ -45,6 +49,10 @@ class RequestOut(BaseModel):
     assignee: PersonOut | None
     created_at: datetime
     updated_at: datetime
+    assigned_at: datetime | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    cancelled_at: datetime | None
 
     @classmethod
     def from_row(cls, row: RequestRow) -> Self:
@@ -67,6 +75,10 @@ class RequestOut(BaseModel):
             assignee=assignee,
             created_at=request.created_at,
             updated_at=request.updated_at,
+            assigned_at=request.assigned_at,
+            started_at=request.started_at,
+            completed_at=request.completed_at,
+            cancelled_at=request.cancelled_at,
         )
 
 

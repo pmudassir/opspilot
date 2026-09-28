@@ -67,6 +67,14 @@ ORG_ROUTES = [
     RouteCase("POST", "/requests", {"title": "Injected", "department_id": "{department_id}"}),
     RouteCase("GET", "/requests/{request_id}"),
     RouteCase("GET", "/requests/{request_id}/events"),
+    RouteCase("POST", "/requests/{request_id}/assign", {"assignee_membership_id": "{membership_id}"}),
+    RouteCase("POST", "/requests/{request_id}/claim"),
+    RouteCase("POST", "/requests/{request_id}/unassign"),
+    RouteCase("POST", "/requests/{request_id}/start"),
+    RouteCase("POST", "/requests/{request_id}/complete"),
+    RouteCase("POST", "/requests/{request_id}/cancel"),
+    RouteCase("GET", "/requests/{request_id}/comments"),
+    RouteCase("POST", "/requests/{request_id}/comments", {"body": "Injected"}),
 ]
 
 
@@ -185,6 +193,19 @@ async def test_cannot_create_request_in_foreign_department(world: World) -> None
     assert (await world.bob.get(org_url(world.org_b, "/requests"))).json()["items"] == []
 
 
+async def test_cannot_assign_own_request_to_foreign_member(world: World) -> None:
+    """assignee_membership_id in the body is resolved inside the caller's org only."""
+    own_request = await create_request_id(world.bob, world.org_b, world.it_department_b)
+
+    response = await world.bob.post(
+        org_url(world.org_b, f"/requests/{own_request}/assign"),
+        json={"assignee_membership_id": world.carol_membership_a},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Assignee not found"
+
+
 async def test_cannot_add_foreign_member_to_own_department(world: World) -> None:
     url = org_url(world.org_b, f"/departments/{world.it_department_b}/members/{world.carol_membership_a}")
 
@@ -229,9 +250,15 @@ async def test_attacks_leave_victim_organization_unchanged(world: World) -> None
         ("carol@a.example", "agent", "active"),
     ]
     requests = (await world.alice.get(org_url(world.org_a, "/requests"))).json()["items"]
+    comments = (
+        await world.alice.get(org_url(world.org_a, f"/requests/{world.request_a}/comments"))
+    ).json()
     assert [d["name"] for d in departments] == ["IT"]
     assert [m["email"] for m in it_members] == ["carol@a.example"]
-    assert [r["title"] for r in requests] == ["Projector broken"]
+    assert [(r["title"], r["status"], r["assignee"]) for r in requests] == [
+        ("Projector broken", "open", None)
+    ]
+    assert comments == []
 
 
 async def test_deactivated_member_loses_access_immediately(

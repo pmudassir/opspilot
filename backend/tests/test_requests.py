@@ -172,7 +172,7 @@ async def test_filters_by_department_priority_and_status(
     await create_request(hotel.mia, hotel.org_id, hotel.it, title="IT urgent", priority="urgent")
     cancelled = await create_request_id(hotel.mia, hotel.org_id, hotel.housekeeping, title="HK")
     await db_session.execute(
-        text("UPDATE requests SET status = 'cancelled' WHERE id = :id"), {"id": cancelled}
+        text("UPDATE requests SET status = 'cancelled', cancelled_at = now() WHERE id = :id"), {"id": cancelled}
     )
     await db_session.commit()
 

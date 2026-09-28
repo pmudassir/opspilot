@@ -67,3 +67,14 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** history is only trustworthy if nobody can rewrite it, including buggy code, scripts and manual SQL. A trigger rejects UPDATE/DELETE on `request_events`.
 - **Alternatives:** convention only (no API to edit events); REVOKE privileges from the app role (needs separate DB roles for migrations vs. runtime).
 - **Revisit when:** we split DB roles (then also REVOKE), or need data-retention deletion (a controlled, audited procedure).
+
+## ADR-014: Lifecycle transitions use optimistic compare-and-set, not row locks
+- **Why:** conflicts are rare; the check (permissions, state, department membership) runs without holding a lock; a 409 tells the client to reload. The race is on one row, so a guarded UPDATE is sufficient.
+- **Alternatives:** `SELECT … FOR UPDATE` before checking (pessimistic, also correct, holds a lock during checks); a `version` column (more general, covers edits to any field).
+- **Revisit when:** requests gain editable fields (title, priority): add a `version` column and include it in the guard.
+- **Contrast:** member changes (ADR none, see multi-tenancy.md) use a lock because that race is write skew across *different* rows.
+
+## ADR-015: One endpoint per lifecycle action
+- **Why:** each action has distinct authorization and body; `POST …/assign`, `…/claim` make rules explicit and discoverable in OpenAPI.
+- **Alternatives:** `PATCH /requests/{id} {status}` (generic, hides which transitions and rules exist).
+- **Revisit when:** never expected; new actions add endpoints plus a row in `TRANSITIONS`.

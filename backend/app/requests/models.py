@@ -79,6 +79,16 @@ class Request(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             " OR status = 'cancelled'",
             name="status_matches_assignee",
         ),
+        # Lifecycle timestamps must agree with the status they describe.
+        CheckConstraint(
+            "(status = 'completed') = (completed_at IS NOT NULL)", name="completed_at_matches_status"
+        ),
+        CheckConstraint(
+            "(status = 'cancelled') = (cancelled_at IS NOT NULL)", name="cancelled_at_matches_status"
+        ),
+        CheckConstraint(
+            "status <> 'in_progress' OR started_at IS NOT NULL", name="in_progress_has_started_at"
+        ),
         # Default listing: newest first within an org, keyset-paginated on (created_at, id).
         Index("ix_requests_org_created", "organization_id", text("created_at DESC"), text("id DESC")),
         # A member's own requests (members can only see these).
@@ -108,6 +118,12 @@ class Request(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=RequestPriority.NORMAL,
         server_default=RequestPriority.NORMAL.value,
     )
+    # Lifecycle timestamps for metrics. assigned_at/started_at record the *first*
+    # assignment/start (response-time metrics); the event log holds every change.
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class RequestEvent(UUIDPrimaryKeyMixin, Base):
