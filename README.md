@@ -27,4 +27,6 @@ npm install
 npm run dev                        # http://localhost:3000 (proxies /api to :8000)
 npm run gen:api                    # after backend API changes: regenerate TS types
 npm run typecheck && npm run lint && npm test
+npx playwright install chromium      # first time only (skip if already cached)
+npm run test:e2e                     # own servers on :3001/:8001 + opspilot_e2e DB; dev servers untouched
 ```

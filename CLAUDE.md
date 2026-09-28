@@ -12,7 +12,8 @@ Phase 1 backend is complete. See `docs/`.
 - UI is thin: no business rules. Which actions a user may take comes from the API, never re-derived.
 - API types are generated: after any backend API change run `npm run gen:api` in `frontend/`
   (backend test `test_openapi_snapshot.py` fails otherwise).
-- Frontend checks: `npm run typecheck && npm run lint && npm run build`.
+- Frontend checks: `npm run typecheck && npm run lint && npm test && npm run test:e2e` (e2e uses its own ports/DB/dist dir).
+- Never `next build` in `frontend/` directly while a dev server may be running; `test:e2e` builds into `.next-e2e`.
 
 ## Hard rules
 - **No AI features in the product yet**: no LLM APIs, LangGraph, RAG, embeddings, pgvector, agents, MCP.

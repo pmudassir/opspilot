@@ -44,13 +44,21 @@
 - Label/style maps are `Record<RequestStatus, …>` over the generated types: a new backend status fails the frontend build until handled.
 
 ## Checks
-`npm run typecheck` (runs `next typegen` first so route types exist), `npm run lint`, `npm test` (Vitest: pure logic such as URL filters, the open-redirect guard, time formatting), `npm run build`.
+`npm run typecheck` (runs `next typegen` first so route types exist), `npm run lint`, `npm test`, `npm run test:e2e` (Vitest: pure logic such as URL filters, the open-redirect guard, time formatting), `npm run build`.
+
+## End-to-end tests (`frontend/e2e/`, Playwright)
+- `npm run test:e2e` starts its **own** backend (:8001) and production frontend (:3001, built into `.next-e2e`) against `opspilot_e2e`, which `backend/scripts/reset_e2e_database.py` creates/migrates/empties first (it refuses any DB not named `*_e2e`). Dev servers and dev data are untouched; ports 3001/8001 must be free.
+- Setup through the API (`e2e/support.ts`: `createOrg`, `addMember`, `createRequest`, `act`, `pageAs`), behaviour through the UI. Every test creates its own org, so tests run in parallel.
+- No retries: flakes are bugs. Match our error box with `errorBox(page)`, not any `role="alert"`.
+- Coverage: signup; login/logout; deep link through login (keeps the query string); open-redirect guard; session check runs once; filters in URL + Back; load more; junk URL params; role-based navigation; stale action → 409 → refresh; deactivation; last-admin guard; and one full UI journey from signup to a completed request.
+- Found by this suite: the post-login redirect dropped the deep link's query string (`usePathname` excludes it), and sign-out raced the app shell's "session expired" redirect (clearing the cache in place). Sign-out now does a full page load, which also guarantees none of the previous user's data survives.
 
 ## Lessons
 - `@types/node` must match the Node runtime (24). The scaffold's `^20` blocked Vitest 5; fixed the version rather than forcing with `--legacy-peer-deps`.
 - Next.js renders a hidden `role="alert"` route announcer. Browser tests must target our error box, not any alert.
 - `@playwright/test` is pinned to 1.60.0 to match the locally cached Chromium build.
 - When checking UI locally, make sure *your* server is the one answering: a dev server already on :3000/:8000 silently took the ports. Use other ports (`API_ORIGIN`, `ALLOWED_ORIGINS`) for scripted checks.
+- The e2e build writes to `.next-e2e` and Next.js adds that folder's type paths to `tsconfig.json` (committed, so runs don't dirty the tree). It also points the gitignored `next-env.d.ts` there; `npm run typecheck` or `next dev` regenerates it.
 - Don't run `next build` in the same folder as a running `next dev`: it left the dev server returning 404 for a newly added route (a fresh dev server served it fine). Restarting `npm run dev` fixes it. Build from a separate copy instead.
 - Playwright `getByRole(..., { name })` matches a **case-insensitive substring** by default: waiting for heading "IT" matched "Facil*it*ies". That made a script type into a form mid-request, so it looked like a stuck button. Use `exact: true` for short names.
 - In browser checks, use auto-retrying assertions (`expect(...).toHaveValue(...)`) instead of reading state right after an action. The UI updates in more than one render.

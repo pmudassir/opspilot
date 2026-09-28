@@ -44,10 +44,13 @@ export function useSignup() {
 }
 
 export function useLogout() {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => unwrap(api.POST("/api/v1/auth/logout")),
-    onSettled: () => queryClient.clear(),
+    // Full page load, not client navigation: it discards every cached query (nothing of this
+    // user stays reachable via Back), and avoids racing the app shell's "session expired →
+    // /login?next=…" redirect, which clearing the cache in place would trigger.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- the full reload is the point (wipes the previous user's state)
+    onSettled: () => window.location.assign("/login"),
   });
 }
 

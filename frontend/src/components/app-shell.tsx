@@ -25,8 +25,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const logout = useLogout();
 
   useEffect(() => {
-    if (isUnauthorized(me.error)) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-  }, [me.error, pathname, router]);
+    if (!isUnauthorized(me.error)) return;
+    // Include the query string, so a filtered deep link survives the trip through login.
+    const here = window.location.pathname + window.location.search;
+    router.replace(`/login?next=${encodeURIComponent(here)}`);
+  }, [me.error, router]);
 
   if (me.error && !isUnauthorized(me.error)) {
     return (
@@ -86,7 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               variant="ghost"
               size="sm"
               pending={logout.isPending}
-              onClick={() => logout.mutate(undefined, { onSettled: () => router.replace("/login") })}
+              onClick={() => logout.mutate()}
             >
               Sign out
             </Button>
