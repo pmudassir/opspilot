@@ -11,19 +11,20 @@ docker compose up -d --wait        # Postgres 17 (dev DB + opspilot_test)
 cd backend
 cp .env.example .env               # first time only
 uv sync
-uv run pytest                      # tests run against opspilot_test
+uv run alembic upgrade head        # create/upgrade the dev DB schema (repeat after pulling new migrations)
+uv run pytest                      # tests run against opspilot_test (migrated automatically)
 uv run uvicorn app.main:app --reload
 curl localhost:8000/health         # {"status":"ok","database":"ok"}
 ```
 
 ## Frontend — local setup
 
-Requires Node 20+. The backend must be running on port 8000.
+Requires Node 24+. The backend must be running on port 8000.
 
 ```bash
 cd frontend
 npm install
 npm run dev                        # http://localhost:3000 (proxies /api to :8000)
 npm run gen:api                    # after backend API changes: regenerate TS types
-npm run typecheck && npm run lint
+npm run typecheck && npm run lint && npm test
 ```
