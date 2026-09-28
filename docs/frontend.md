@@ -21,6 +21,19 @@
 | `/` | Redirects to the first organization, or `/login` |
 | `/login`, `/signup` | Public. `useSearchParams` wrapped in `<Suspense>` (Next.js requirement) |
 | `/orgs/[orgId]/*` | `AppShell`: requires session + membership of `orgId`; provides `useCurrentOrg()` (role for UI only) |
+| `/orgs/[orgId]/requests` | List: filters in the URL, "Load more" via cursor (`useInfiniteQuery`), loading/empty/filtered-empty/error states |
+| `/orgs/[orgId]/requests/new` | Create form (department required, priority default normal); 422s shown per field |
+
+## Request list details
+- **Filters live in the URL** (`?status=open&status=assigned&department_id=…&priority=urgent`): shareable, reload-safe. `parseFilters()` treats the URL as untrusted input (unknown statuses, non-UUID department ids and bad priorities are dropped).
+- Filter changes use `router.push` so **Back undoes a filter**. (`router.replace` overwrote history and Back left the page. Caught by a browser check.)
+- Query keys include org + filters: `["requests", orgId, "list", filters]`. Creating a request invalidates `["requests", orgId]`, which refreshes every filtered view of that org.
+- Label/style maps are `Record<RequestStatus, …>` over the generated types: a new backend status fails the frontend build until handled.
 
 ## Checks
-`npm run typecheck` (runs `next typegen` first so route types exist), `npm run lint`, `npm run build`.
+`npm run typecheck` (runs `next typegen` first so route types exist), `npm run lint`, `npm test` (Vitest: pure logic such as URL filters, the open-redirect guard, time formatting), `npm run build`.
+
+## Lessons
+- `@types/node` must match the Node runtime (24). The scaffold's `^20` blocked Vitest 5; fixed the version rather than forcing with `--legacy-peer-deps`.
+- Next.js renders a hidden `role="alert"` route announcer. Browser tests must target our error box, not any alert.
+- `@playwright/test` is pinned to 1.60.0 to match the locally cached Chromium build.
