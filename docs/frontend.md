@@ -44,4 +44,5 @@
 - Next.js renders a hidden `role="alert"` route announcer. Browser tests must target our error box, not any alert.
 - `@playwright/test` is pinned to 1.60.0 to match the locally cached Chromium build.
 - When checking UI locally, make sure *your* server is the one answering: a dev server already on :3000/:8000 silently took the ports. Use other ports (`API_ORIGIN`, `ALLOWED_ORIGINS`) for scripted checks.
+- Don't run `next build` in the same folder as a running `next dev`: it left the dev server returning 404 for a newly added route (a fresh dev server served it fine). Restarting `npm run dev` fixes it. Build from a separate copy instead.
 - In browser checks, use auto-retrying assertions (`expect(...).toHaveValue(...)`) instead of reading state right after an action. The UI updates in more than one render.
