@@ -13,9 +13,12 @@ cp .env.example .env               # first time only
 uv sync
 uv run alembic upgrade head        # create/upgrade the dev DB schema (repeat after pulling new migrations)
 uv run pytest                      # tests run against opspilot_test (migrated automatically)
+uv run python -m scripts.seed_demo # optional: demo hotel, one login per role (safe to re-run)
 uv run uvicorn app.main:app --reload
 curl localhost:8000/health         # {"status":"ok","database":"ok"}
 ```
+
+Maintenance: `uv run python -m scripts.cleanup_expired` removes expired sessions and old login attempts (run daily).
 
 ## Frontend — local setup
 

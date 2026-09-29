@@ -5,10 +5,21 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from starlette.concurrency import run_in_threadpool
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
 
-# argon2id with the library's RFC 9106 defaults (~64 MiB memory per hash).
-_hasher = PasswordHasher()
+# Minimal argon2id cost, used ONLY when ENVIRONMENT=test: the suite creates hundreds of users
+# and the production cost (~64 MiB, tens of ms each) dominated its runtime.
+_TEST_COST = {"time_cost": 1, "memory_cost": 8 * 1024, "parallelism": 1}
+
+
+def build_password_hasher(environment: str) -> PasswordHasher:
+    """argon2id with the library's RFC 9106 defaults everywhere except the test suite."""
+    return PasswordHasher(**_TEST_COST) if environment == "test" else PasswordHasher()
+
+
+_hasher = build_password_hasher(get_settings().environment)
 
 
 @cache
