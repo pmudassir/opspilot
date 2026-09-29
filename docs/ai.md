@@ -33,5 +33,17 @@ The first AI feature. A person describes a problem in their own words; AI sugges
 - `tests/test_groq_drafter.py`: strict-schema shape, request parameters, output parsing, SDK error mapping (no network).
 - `frontend/e2e/ai-drafts.spec.ts`: UI via network interception (flag on, canned draft, error).
 
-## Next: evals
-A labelled dataset of realistic reports (expected department + priority) and a script measuring department accuracy, priority accuracy, invalid-output rate, latency and tokens, comparing `gpt-oss-20b` vs `gpt-oss-120b` (both free). It needs `GROQ_API_KEY`.
+## Evals (`backend/evals/request_drafts/`)
+- `cases.jsonl`: labelled reports for two org types (hotel, IT helpdesk): clear, safety, time-pressure, ambiguous department, vague, no-fit, non-English, buried fact, and prompt-injection cases. Departments accept a *set* of right answers where reasonable people differ; priority has an `exact` target plus an `acceptable` range (urgency is partly subjective).
+- `grading.py`: deterministic (no LLM judge). Failed calls count as wrong, not skipped. Dataset consistency and grading are unit-tested in CI.
+- Run (Groq free tier, ~1 request per case per model; results saved to `results/`, gitignored):
+  `uv run python -m evals.request_drafts.run --models openai/gpt-oss-20b openai/gpt-oss-120b`
+- Don't edit labels to match model output. Change prompts with generic wording, and add fresh cases to check a change generalizes.
+
+### Results
+| Prompt | Model | Passed | Dept acc. | Priority exact / acceptable | Invalid | p50 / p90 latency | Tokens in / out |
+|---|---|---|---|---|---|---|---|
+| v1 (2026-09-29) | gpt-oss-20b | 28/34 | 85% | 41% / 97% | 0% | 685 / 1069 ms | 455 / 128 |
+| v1 (2026-09-29) | gpt-oss-120b | 30/34 | 91% | 44% / 94% | 0% | 865 / 1458 ms | 455 / 158 |
+
+v1 findings: both injection cases resisted on both models; the systematic failure is "no department fits", where both default to Front Desk; "broken glass" → Maintenance (label kept: Housekeeping); a 2 a.m. noise complaint rated urgent.

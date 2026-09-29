@@ -22,3 +22,6 @@ node_modules/
 
 # Claude working state (not project history)
 .claude/state/
+
+# eval run outputs
+backend/evals/request_drafts/results/
