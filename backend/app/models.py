@@ -4,7 +4,7 @@ Alembic and the test suite import this module so `Base.metadata` is complete.
 A model missing here would look "deleted" to autogenerate, which would emit DROP TABLE.
 """
 
-from app.auth.models import AuthSession
+from app.auth.models import AuthSession, LoginAttempt
 from app.base import Base
 from app.comments.models import Comment
 from app.departments.models import Department, DepartmentMember
@@ -18,6 +18,7 @@ __all__ = [
     "Comment",
     "Department",
     "DepartmentMember",
+    "LoginAttempt",
     "Membership",
     "Organization",
     "Request",

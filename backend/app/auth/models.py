@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, LargeBinary, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, LargeBinary, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.base import Base, UUIDPrimaryKeyMixin
@@ -24,3 +24,28 @@ class AuthSession(UUIDPrimaryKeyMixin, Base):
         DateTime(timezone=True), server_default=func.now()
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+IP_MAX_LENGTH = 45  # textual IPv6
+
+
+class LoginAttempt(UUIDPrimaryKeyMixin, Base):
+    """One sign-in attempt, for throttling (app/auth/throttling.py) and security audit.
+
+    Global, not tenant-owned: login happens before any organization is chosen.
+    Rows older than the retention period are removed by scripts/cleanup_expired.py.
+    """
+
+    __tablename__ = "login_attempts"
+    __table_args__ = (
+        # Throttling counts recent failures by email and by IP.
+        Index("ix_login_attempts_email_created_at", "email", "created_at"),
+        Index("ix_login_attempts_ip_created_at", "ip", "created_at"),
+    )
+
+    email: Mapped[str] = mapped_column(String(320))
+    ip: Mapped[str] = mapped_column(String(IP_MAX_LENGTH))
+    succeeded: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

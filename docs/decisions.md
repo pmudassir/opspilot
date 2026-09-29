@@ -99,3 +99,13 @@ Format: decision · why · alternatives · revisit when.
 - **Alternatives:** frontend derives buttons from role/status (duplicated business logic); show all buttons and rely on errors (poor UX).
 - **Revisit when:** a client needs the *reason* an action is unavailable (return reasons alongside).
 - **Extended (Phase 2 Step 4):** `/me` also returns each membership's `permissions` from `ROLE_PERMISSIONS`, so navigation and admin controls don't compare role names either.
+
+## ADR-020: Login throttling in Postgres, three rules, checked before hashing
+- **Why:** closes brute force without new infrastructure; Postgres is shared by all workers and survives restarts. Per-(email, IP), per-IP and per-email rules cover single guessers, credential stuffing and IP rotation; checking first keeps throttled requests cheap.
+- **Alternatives:** in-memory counters (per process, reset on restart); Redis (new service, justified at high login volume or when many features need rate limits); per-email lockout only (lets attackers lock out victims easily).
+- **Revisit when:** login volume makes the window queries noticeable, or other endpoints need rate limits: then Redis.
+
+## ADR-021: Client IP comes from uvicorn's trusted-proxy resolution
+- **Why:** behind proxies the socket peer is the proxy; `X-Forwarded-For` is only trustworthy when appended by *our* proxies. Uvicorn's `FORWARDED_ALLOW_IPS` + right-most-untrusted resolution does this correctly (verified).
+- **Alternatives:** read `X-Forwarded-For` ourselves (easy to get wrong: left-most is attacker-controlled); ignore it (all users share the proxy's IP).
+- **Revisit when:** deploying: set `FORWARDED_ALLOW_IPS` to the real proxy addresses.

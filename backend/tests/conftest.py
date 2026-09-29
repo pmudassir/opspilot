@@ -71,13 +71,18 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
         yield c
 
 
+DEFAULT_CLIENT_IP = "127.0.0.1"
+
+
 @pytest.fixture
-async def make_client(app: FastAPI) -> AsyncIterator[Callable[[], AsyncClient]]:
-    """Independent clients = independent cookie jars = independent browsers/users."""
+async def make_client(app: FastAPI) -> AsyncIterator[Callable[..., AsyncClient]]:
+    """Independent clients = independent cookie jars = independent browsers/users.
+    `ip` sets the caller's address (for throttling tests)."""
     clients: list[AsyncClient] = []
 
-    def factory() -> AsyncClient:
-        new_client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    def factory(ip: str = DEFAULT_CLIENT_IP) -> AsyncClient:
+        transport = ASGITransport(app=app, client=(ip, 50000))
+        new_client = AsyncClient(transport=transport, base_url="http://test")
         clients.append(new_client)
         return new_client
 

@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
@@ -74,13 +74,28 @@ async def signup(
     return await _me(session, user)
 
 
+def client_ip(request: Request) -> str:
+    """The caller's address as uvicorn resolved it. Behind proxies this is only correct if
+    uvicorn trusts exactly our proxies (FORWARDED_ALLOW_IPS) and the edge proxy appends the
+    real client to X-Forwarded-For. See docs/authentication.md."""
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/login")
 async def login(
-    body: LoginRequest, session: SessionDep, settings: SettingsDep, response: Response
+    body: LoginRequest,
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    response: Response,
 ) -> MeResponse:
     try:
         user, issued = await service.login(
-            session, email=body.email, password=body.password, session_ttl=_session_ttl(settings)
+            session,
+            email=body.email,
+            password=body.password,
+            ip=client_ip(request),
+            session_ttl=_session_ttl(settings),
         )
     except service.InvalidCredentialsError:
         raise HTTPException(

@@ -12,7 +12,8 @@
 | `comments` | yes | request, author, body |
 | `request_events` | yes | append-only (DB trigger rejects UPDATE/DELETE); typed `from_status`/`to_status`, JSONB `data`; `created_at = clock_timestamp()` so events in one transaction still order correctly |
 | `comments` | yes | request, author, body; immutable in V1; index `(organization_id, request_id, created_at)` |
-| `sessions` | no | hashed session token, user, expiry (see authentication.md) |
+| `auth_sessions` | no | hashed session token, user, expiry (see authentication.md) |
+| `login_attempts` | no | email, ip, succeeded, created_at; indexes `(email, created_at)`, `(ip, created_at)` for throttling windows; 30-day retention |
 
 Deferred: Task, Invitation, Location, Category, per-org request numbers.
 

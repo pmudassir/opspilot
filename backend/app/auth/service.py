@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.models import AuthSession
 from app.auth.passwords import hash_password, verify_password
+from app.auth.throttling import ensure_login_allowed, record_login_attempt
 from app.db import violated_constraint
 from app.errors import ConflictError
 from app.organizations.models import Membership, MembershipRole, Organization
@@ -87,12 +88,22 @@ async def register(
 
 
 async def login(
-    session: AsyncSession, *, email: str, password: str, session_ttl: timedelta
+    session: AsyncSession, *, email: str, password: str, ip: str, session_ttl: timedelta
 ) -> tuple[User, IssuedSession]:
+    await ensure_login_allowed(session, email=email, ip=ip)  # 429 before any hashing
     user = await session.scalar(select(User).where(User.email == email))
     password_hash = user.password_hash if user is not None else None
     if user is None or not await verify_password(password_hash, password):
+        record_login_attempt(session, email=email, ip=ip, succeeded=False)
+        await session.commit()  # the failure must count even though we raise
         raise InvalidCredentialsError
+    record_login_attempt(session, email=email, ip=ip, succeeded=True)
+    # Opportunistic cleanup: keeps an active user's expired sessions from piling up.
+    await session.execute(
+        delete(AuthSession).where(
+            AuthSession.user_id == user.id, AuthSession.expires_at <= datetime.now(UTC)
+        )
+    )
     issued = _add_auth_session(session, user.id, session_ttl)
     await session.commit()
     return user, issued

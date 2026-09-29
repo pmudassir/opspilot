@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 class DomainError(Exception):
     status_code: int = status.HTTP_400_BAD_REQUEST
+    headers: dict[str, str] | None = None
 
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
@@ -37,7 +38,9 @@ class UnprocessableError(DomainError):
 
 async def _handle_domain_error(_: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, DomainError)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers
+    )
 
 
 def register_error_handlers(app: FastAPI) -> None:
