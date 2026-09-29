@@ -142,6 +142,103 @@
         "title": "CreateRequestBody",
         "type": "object"
       },
+      "DepartmentMetricsOut": {
+        "properties": {
+          "assigned": {
+            "title": "Assigned",
+            "type": "integer"
+          },
+          "cancelled_in_period": {
+            "title": "Cancelled In Period",
+            "type": "integer"
+          },
+          "completed_in_period": {
+            "title": "Completed In Period",
+            "type": "integer"
+          },
+          "created_in_period": {
+            "title": "Created In Period",
+            "type": "integer"
+          },
+          "department_id": {
+            "format": "uuid",
+            "title": "Department Id",
+            "type": "string"
+          },
+          "department_name": {
+            "title": "Department Name",
+            "type": "string"
+          },
+          "in_progress": {
+            "title": "In Progress",
+            "type": "integer"
+          },
+          "median_hours_to_assign": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Hours To Assign"
+          },
+          "median_hours_to_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Hours To Complete"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "p90_hours_to_assign": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P90 Hours To Assign"
+          },
+          "p90_hours_to_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P90 Hours To Complete"
+          }
+        },
+        "required": [
+          "open",
+          "assigned",
+          "in_progress",
+          "created_in_period",
+          "completed_in_period",
+          "cancelled_in_period",
+          "median_hours_to_assign",
+          "p90_hours_to_assign",
+          "median_hours_to_complete",
+          "p90_hours_to_complete",
+          "department_id",
+          "department_name"
+        ],
+        "title": "DepartmentMetricsOut",
+        "type": "object"
+      },
       "DepartmentOut": {
         "properties": {
           "id": {
@@ -178,6 +275,92 @@
           "name"
         ],
         "title": "DepartmentRef",
+        "type": "object"
+      },
+      "FlowMetricsOut": {
+        "properties": {
+          "assigned": {
+            "title": "Assigned",
+            "type": "integer"
+          },
+          "cancelled_in_period": {
+            "title": "Cancelled In Period",
+            "type": "integer"
+          },
+          "completed_in_period": {
+            "title": "Completed In Period",
+            "type": "integer"
+          },
+          "created_in_period": {
+            "title": "Created In Period",
+            "type": "integer"
+          },
+          "in_progress": {
+            "title": "In Progress",
+            "type": "integer"
+          },
+          "median_hours_to_assign": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Hours To Assign"
+          },
+          "median_hours_to_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Hours To Complete"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "p90_hours_to_assign": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P90 Hours To Assign"
+          },
+          "p90_hours_to_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P90 Hours To Complete"
+          }
+        },
+        "required": [
+          "open",
+          "assigned",
+          "in_progress",
+          "created_in_period",
+          "completed_in_period",
+          "cancelled_in_period",
+          "median_hours_to_assign",
+          "p90_hours_to_assign",
+          "median_hours_to_complete",
+          "p90_hours_to_complete"
+        ],
+        "title": "FlowMetricsOut",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -347,6 +530,31 @@
         "title": "MembershipStatus",
         "type": "string"
       },
+      "MetricsOut": {
+        "properties": {
+          "departments": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentMetricsOut"
+            },
+            "title": "Departments",
+            "type": "array"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/FlowMetricsOut"
+          }
+        },
+        "required": [
+          "period_days",
+          "totals",
+          "departments"
+        ],
+        "title": "MetricsOut",
+        "type": "object"
+      },
       "OrganizationOut": {
         "properties": {
           "id": {
@@ -381,7 +589,8 @@
           "requests:claim",
           "requests:work",
           "requests:work_any",
-          "requests:cancel_any"
+          "requests:cancel_any",
+          "metrics:read"
         ],
         "title": "Permission",
         "type": "string"
@@ -1573,6 +1782,77 @@
         "summary": "Update Member",
         "tags": [
           "organizations"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/metrics": {
+      "get": {
+        "operationId": "get_metrics_api_v1_orgs__org_id__metrics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "opspilot_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Opspilot Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Metrics",
+        "tags": [
+          "metrics"
         ]
       }
     },

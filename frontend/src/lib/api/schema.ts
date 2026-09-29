@@ -177,6 +177,23 @@ export interface paths {
         patch: operations["update_member_api_v1_orgs__org_id__members__membership_id__patch"];
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Metrics */
+        get: operations["get_metrics_api_v1_orgs__org_id__metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/requests": {
         parameters: {
             query?: never;
@@ -434,6 +451,36 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** DepartmentMetricsOut */
+        DepartmentMetricsOut: {
+            /** Assigned */
+            assigned: number;
+            /** Cancelled In Period */
+            cancelled_in_period: number;
+            /** Completed In Period */
+            completed_in_period: number;
+            /** Created In Period */
+            created_in_period: number;
+            /**
+             * Department Id
+             * Format: uuid
+             */
+            department_id: string;
+            /** Department Name */
+            department_name: string;
+            /** In Progress */
+            in_progress: number;
+            /** Median Hours To Assign */
+            median_hours_to_assign: number | null;
+            /** Median Hours To Complete */
+            median_hours_to_complete: number | null;
+            /** Open */
+            open: number;
+            /** P90 Hours To Assign */
+            p90_hours_to_assign: number | null;
+            /** P90 Hours To Complete */
+            p90_hours_to_complete: number | null;
+        };
         /** DepartmentOut */
         DepartmentOut: {
             /**
@@ -453,6 +500,29 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** FlowMetricsOut */
+        FlowMetricsOut: {
+            /** Assigned */
+            assigned: number;
+            /** Cancelled In Period */
+            cancelled_in_period: number;
+            /** Completed In Period */
+            completed_in_period: number;
+            /** Created In Period */
+            created_in_period: number;
+            /** In Progress */
+            in_progress: number;
+            /** Median Hours To Assign */
+            median_hours_to_assign: number | null;
+            /** Median Hours To Complete */
+            median_hours_to_complete: number | null;
+            /** Open */
+            open: number;
+            /** P90 Hours To Assign */
+            p90_hours_to_assign: number | null;
+            /** P90 Hours To Complete */
+            p90_hours_to_complete: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -530,6 +600,14 @@ export interface components {
          * @enum {string}
          */
         MembershipStatus: "active" | "deactivated";
+        /** MetricsOut */
+        MetricsOut: {
+            /** Departments */
+            departments: components["schemas"]["DepartmentMetricsOut"][];
+            /** Period Days */
+            period_days: number;
+            totals: components["schemas"]["FlowMetricsOut"];
+        };
         /** OrganizationOut */
         OrganizationOut: {
             /**
@@ -544,7 +622,7 @@ export interface components {
          * Permission
          * @enum {string}
          */
-        Permission: "organization:read" | "departments:read" | "departments:manage" | "members:read" | "members:manage" | "requests:create" | "requests:read" | "requests:read_all" | "requests:comment" | "requests:assign" | "requests:claim" | "requests:work" | "requests:work_any" | "requests:cancel_any";
+        Permission: "organization:read" | "departments:read" | "departments:manage" | "members:read" | "members:manage" | "requests:create" | "requests:read" | "requests:read_all" | "requests:comment" | "requests:assign" | "requests:claim" | "requests:work" | "requests:work_any" | "requests:cancel_any" | "metrics:read";
         /** PersonOut */
         PersonOut: {
             /** Full Name */
@@ -1117,6 +1195,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_metrics_api_v1_orgs__org_id__metrics_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: {
+                opspilot_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsOut"];
                 };
             };
             /** @description Validation Error */

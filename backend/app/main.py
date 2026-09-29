@@ -10,6 +10,7 @@ from app.db import engine
 from app.departments.router import router as departments_router
 from app.errors import register_error_handlers
 from app.health import router as health_router
+from app.metrics.router import router as metrics_router
 from app.organizations.router import router as organizations_router
 from app.requests.router import router as requests_router
 
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(departments_router)
     app.include_router(requests_router)
     app.include_router(comments_router)
+    app.include_router(metrics_router)
     return app
 
 

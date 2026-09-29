@@ -29,5 +29,5 @@ Phase 1 backend is complete. See `docs/`.
 - Never edit an applied Alembic migration.
 
 ## Docs (keep concise, update when decisions change)
-- `docs/frontend.md`, `docs/architecture.md`, `docs/database.md`, `docs/multi-tenancy.md`, `docs/authentication.md`
+- `docs/frontend.md`, `docs/metrics.md`, `docs/architecture.md`, `docs/database.md`, `docs/multi-tenancy.md`, `docs/authentication.md`
 - `docs/decisions.md`: short ADRs

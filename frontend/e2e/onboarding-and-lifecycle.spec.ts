@@ -69,7 +69,10 @@ test("new organization → setup → request reported, claimed, worked and compl
   await raj.getByRole("link", { name: "Laptop won't connect to the VPN" }).click();
   await expect(raj).toHaveURL(requestUrl);
   await raj.getByRole("button", { name: "Claim" }).click();
+  await expect(raj.getByText("Raj Patel claimed this request")).toBeVisible();
   await raj.getByRole("button", { name: "Start work" }).click();
+  // Wait like a person would: otherwise the comment races the start request.
+  await expect(raj.getByText("Raj Patel started work")).toBeVisible();
   await raj.getByLabel("Add a comment").fill("VPN profile expired. Reissued it.");
   await raj.getByRole("button", { name: "Comment", exact: true }).click();
   await expect(raj.getByLabel("Add a comment")).toHaveValue("");

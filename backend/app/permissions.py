@@ -29,6 +29,7 @@ class Permission(StrEnum):
     REQUESTS_WORK_ANY = "requests:work_any"
     # Cancel any non-terminal request (requesters may always cancel their own while OPEN).
     REQUESTS_CANCEL_ANY = "requests:cancel_any"
+    METRICS_READ = "metrics:read"
 
 
 _EVERYONE = frozenset(
@@ -50,6 +51,7 @@ _SUPERVISORS = _STAFF | {
     Permission.REQUESTS_ASSIGN,
     Permission.REQUESTS_WORK_ANY,
     Permission.REQUESTS_CANCEL_ANY,
+    Permission.METRICS_READ,
 }
 
 ROLE_PERMISSIONS: dict[MembershipRole, frozenset[Permission]] = {

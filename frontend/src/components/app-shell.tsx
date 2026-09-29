@@ -14,6 +14,7 @@ const NAV: { href: string; label: string; permission: Permission }[] = [
   { href: "requests", label: "Requests", permission: "requests:read" },
   { href: "members", label: "Members", permission: "members:read" },
   { href: "departments", label: "Departments", permission: "departments:read" },
+  { href: "metrics", label: "Metrics", permission: "metrics:read" },
 ];
 
 /** Layout for /orgs/[orgId]/*: requires a session and membership of that organization. */
@@ -63,10 +64,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <OrgContext.Provider value={org}>
       <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-6">
+        {/* Wraps on small screens: the nav drops to its own full-width row and scrolls
+            horizontally, instead of making the whole page wider than the viewport. */}
+        <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2 sm:px-6">
           <span className="text-sm font-semibold tracking-tight text-teal-800">OpsPilot</span>
           <OrgSwitcher currentOrgId={orgId} memberships={me.data.memberships} />
-          <nav className="flex gap-1">
+          <nav className="order-last -mx-1 flex w-full gap-1 overflow-x-auto sm:order-none sm:mx-0 sm:w-auto">
             {NAV.filter((item) => org.can(item.permission)).map((item) => {
               const href = `/orgs/${orgId}/${item.href}`;
               const active = pathname.startsWith(href);
@@ -75,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={item.href}
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-md px-3 py-1.5 text-sm ${active ? "bg-zinc-100 font-medium text-zinc-900" : "text-zinc-600 hover:text-zinc-900"}`}
+                  className={`shrink-0 rounded-md px-3 py-1.5 text-sm ${active ? "bg-zinc-100 font-medium text-zinc-900" : "text-zinc-600 hover:text-zinc-900"}`}
                 >
                   {item.label}
                 </Link>
@@ -83,7 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="text-zinc-700">{me.data.user.full_name}</span>
+            <span className="hidden text-zinc-700 sm:inline">{me.data.user.full_name}</span>
             <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600">{membership.role}</span>
             <Button
               variant="ghost"
@@ -96,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
     </OrgContext.Provider>
   );
 }

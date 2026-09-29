@@ -75,6 +75,7 @@ ORG_ROUTES = [
     RouteCase("POST", "/requests/{request_id}/cancel"),
     RouteCase("GET", "/requests/{request_id}/comments"),
     RouteCase("POST", "/requests/{request_id}/comments", {"body": "Injected"}),
+    RouteCase("GET", "/metrics"),
 ]
 
 

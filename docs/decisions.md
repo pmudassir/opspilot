@@ -109,3 +109,8 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** behind proxies the socket peer is the proxy; `X-Forwarded-For` is only trustworthy when appended by *our* proxies. Uvicorn's `FORWARDED_ALLOW_IPS` + right-most-untrusted resolution does this correctly (verified).
 - **Alternatives:** read `X-Forwarded-For` ourselves (easy to get wrong: left-most is attacker-controlled); ignore it (all users share the proxy's IP).
 - **Revisit when:** deploying: set `FORWARDED_ALLOW_IPS` to the real proxy addresses.
+
+## ADR-022: Metrics as SQL aggregates with median and p90
+- **Why:** Postgres computes counts and percentiles next to the data; medians/p90 describe typical and worst-case experience, whereas means are skewed by outliers.
+- **Alternatives:** load rows and compute in Python (slower as data grows); pre-aggregated rollups (unnecessary at current volume); means (misleading).
+- **Revisit when:** the metrics query becomes slow: add rollups or a materialized view refreshed periodically.
