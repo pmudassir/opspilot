@@ -4,6 +4,7 @@ Alembic and the test suite import this module so `Base.metadata` is complete.
 A model missing here would look "deleted" to autogenerate, which would emit DROP TABLE.
 """
 
+from app.ai.models import AIUsage
 from app.auth.models import AuthSession, LoginAttempt
 from app.base import Base
 from app.comments.models import Comment
@@ -13,6 +14,7 @@ from app.requests.models import Request, RequestEvent
 from app.users.models import User
 
 __all__ = [
+    "AIUsage",
     "AuthSession",
     "Base",
     "Comment",

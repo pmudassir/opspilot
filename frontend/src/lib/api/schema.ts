@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/ai/request-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draft Request */
+        post: operations["draft_request_api_v1_orgs__org_id__ai_request_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/departments": {
         parameters: {
             query?: never;
@@ -501,6 +518,14 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * FeaturesOut
+         * @description Optional capabilities of this deployment (the UI hides what's off).
+         */
+        FeaturesOut: {
+            /** Ai Request Drafts */
+            ai_request_drafts: boolean;
+        };
         /** FlowMetricsOut */
         FlowMetricsOut: {
             /** Assigned */
@@ -554,6 +579,7 @@ export interface components {
         };
         /** MeResponse */
         MeResponse: {
+            features: components["schemas"]["FeaturesOut"];
             /** Memberships */
             memberships: components["schemas"]["MembershipOut"][];
             user: components["schemas"]["UserOut"];
@@ -638,6 +664,30 @@ export interface components {
          * @enum {string}
          */
         RequestAction: "assign" | "claim" | "unassign" | "start" | "complete" | "cancel";
+        /** RequestDraftBody */
+        RequestDraftBody: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * RequestDraftOut
+         * @description A suggestion only: the client shows it in the form for the person to review and submit.
+         */
+        RequestDraftOut: {
+            /** Department Id */
+            department_id: string | null;
+            /** Department Name */
+            department_name: string | null;
+            /** Description */
+            description: string;
+            /** Model */
+            model: string;
+            priority: components["schemas"]["RequestPriority"];
+            /** Rationale */
+            rationale: string;
+            /** Title */
+            title: string;
+        };
         /** RequestEventOut */
         RequestEventOut: {
             actor: components["schemas"]["PersonOut"];
@@ -917,6 +967,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_request_api_v1_orgs__org_id__ai_request_drafts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: {
+                opspilot_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestDraftBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestDraftOut"];
                 };
             };
             /** @description Validation Error */

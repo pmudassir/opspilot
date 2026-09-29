@@ -114,3 +114,13 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** Postgres computes counts and percentiles next to the data; medians/p90 describe typical and worst-case experience, whereas means are skewed by outliers.
 - **Alternatives:** load rows and compute in Python (slower as data grows); pre-aggregated rollups (unnecessary at current volume); means (misleading).
 - **Revisit when:** the metrics query becomes slow: add rollups or a materialized view refreshed periodically.
+
+## ADR-023: AI provider behind a small interface; Groq free tier first
+- **Why:** zero cost for a learning project (user requirement); Groq's free tier offers strict JSON-schema outputs on open models. The `RequestDrafter` protocol has real implementations to justify it (Groq now, the test fake, likely Claude or another model later), and the eval can compare models by configuration.
+- **Alternatives:** Claude API (best quality, paid; no free tier); local Ollama 3B (free and private but weak on an 8 GB M1); Gemini free tier (similar trade-offs).
+- **Revisit when:** the eval shows the free models aren't good enough, data can't go to a free tier, or limits (1K requests/day) are reached.
+
+## ADR-024: AI suggests, humans decide
+- **Why:** model output is probabilistic and can be manipulated via prompt injection. Drafts only pre-fill an editable form; validation, tenant mapping and authorization stay deterministic in normal code.
+- **Alternatives:** auto-create requests from AI output (faster, but errors and injections become data).
+- **Revisit when:** evals show consistently high accuracy for a narrow case, and even then only with an undo path and audit trail.

@@ -277,6 +277,20 @@
         "title": "DepartmentRef",
         "type": "object"
       },
+      "FeaturesOut": {
+        "description": "Optional capabilities of this deployment (the UI hides what's off).",
+        "properties": {
+          "ai_request_drafts": {
+            "title": "Ai Request Drafts",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ai_request_drafts"
+        ],
+        "title": "FeaturesOut",
+        "type": "object"
+      },
       "FlowMetricsOut": {
         "properties": {
           "assigned": {
@@ -425,6 +439,9 @@
       },
       "MeResponse": {
         "properties": {
+          "features": {
+            "$ref": "#/components/schemas/FeaturesOut"
+          },
           "memberships": {
             "items": {
               "$ref": "#/components/schemas/MembershipOut"
@@ -438,7 +455,8 @@
         },
         "required": [
           "user",
-          "memberships"
+          "memberships",
+          "features"
         ],
         "title": "MeResponse",
         "type": "object"
@@ -625,6 +643,80 @@
         ],
         "title": "RequestAction",
         "type": "string"
+      },
+      "RequestDraftBody": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "RequestDraftBody",
+        "type": "object"
+      },
+      "RequestDraftOut": {
+        "description": "A suggestion only: the client shows it in the form for the person to review and submit.",
+        "properties": {
+          "department_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Id"
+          },
+          "department_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Name"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/RequestPriority"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "department_id",
+          "department_name",
+          "priority",
+          "rationale",
+          "model"
+        ],
+        "title": "RequestDraftOut",
+        "type": "object"
       },
       "RequestEventOut": {
         "properties": {
@@ -1228,6 +1320,75 @@
         "summary": "Get Organization",
         "tags": [
           "organizations"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/request-drafts": {
+      "post": {
+        "operationId": "draft_request_api_v1_orgs__org_id__ai_request_drafts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "opspilot_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Opspilot Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestDraftBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestDraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Draft Request",
+        "tags": [
+          "ai"
         ]
       }
     },

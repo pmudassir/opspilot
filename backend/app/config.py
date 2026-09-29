@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Annotated, Literal
 
 from fastapi import Depends
-from pydantic import PostgresDsn
+from pydantic import PostgresDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 24 * 7
     # Origins allowed to make state-changing (POST/PUT/PATCH/DELETE) browser requests.
     allowed_origins: list[str] = ["http://localhost:3000"]
+
+    # AI request drafts (optional). Without a key the feature is off; the app works as before.
+    # SecretStr: the key never appears in logs, reprs or error messages.
+    groq_api_key: SecretStr | None = None
+    ai_model: str = "openai/gpt-oss-120b"
+    ai_timeout_seconds: float = 20.0
+    ai_drafts_per_hour: int = 20
 
     @property
     def session_cookie_secure(self) -> bool:

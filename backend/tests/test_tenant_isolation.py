@@ -76,6 +76,7 @@ ORG_ROUTES = [
     RouteCase("GET", "/requests/{request_id}/comments"),
     RouteCase("POST", "/requests/{request_id}/comments", {"body": "Injected"}),
     RouteCase("GET", "/metrics"),
+    RouteCase("POST", "/ai/request-drafts", {"text": "The Wi-Fi keeps dropping in room 2"}),
 ]
 
 

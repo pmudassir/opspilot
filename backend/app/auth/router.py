@@ -3,9 +3,11 @@ from datetime import timedelta
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.dependencies import DrafterDep
 from app.auth import service
 from app.auth.dependencies import SESSION_COOKIE_NAME, CurrentUserDep, SessionTokenDep
 from app.auth.schemas import (
+    FeaturesOut,
     LoginRequest,
     MembershipOut,
     MeResponse,
@@ -42,7 +44,7 @@ def _set_session_cookie(
     )
 
 
-async def _me(session: AsyncSession, user: User) -> MeResponse:
+async def _me(session: AsyncSession, user: User, drafter: DrafterDep) -> MeResponse:
     memberships = await list_active_memberships(session, user.id)
     return MeResponse(
         user=UserOut(id=user.id, email=user.email, full_name=user.full_name),
@@ -55,12 +57,17 @@ async def _me(session: AsyncSession, user: User) -> MeResponse:
             )
             for membership, organization in memberships
         ],
+        features=FeaturesOut(ai_request_drafts=drafter is not None),
     )
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(
-    body: SignupRequest, session: SessionDep, settings: SettingsDep, response: Response
+    body: SignupRequest,
+    session: SessionDep,
+    settings: SettingsDep,
+    response: Response,
+    drafter: DrafterDep,
 ) -> MeResponse:
     user, issued = await service.register(
         session,
@@ -71,7 +78,7 @@ async def signup(
         session_ttl=_session_ttl(settings),
     )
     _set_session_cookie(response, issued, settings)
-    return await _me(session, user)
+    return await _me(session, user, drafter)
 
 
 def client_ip(request: Request) -> str:
@@ -88,6 +95,7 @@ async def login(
     session: SessionDep,
     settings: SettingsDep,
     response: Response,
+    drafter: DrafterDep,
 ) -> MeResponse:
     try:
         user, issued = await service.login(
@@ -102,7 +110,7 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_CREDENTIALS_DETAIL
         ) from None
     _set_session_cookie(response, issued, settings)
-    return await _me(session, user)
+    return await _me(session, user, drafter)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -121,5 +129,5 @@ async def logout(
 
 
 @router.get("/me")
-async def me(user: CurrentUserDep, session: SessionDep) -> MeResponse:
-    return await _me(session, user)
+async def me(user: CurrentUserDep, session: SessionDep, drafter: DrafterDep) -> MeResponse:
+    return await _me(session, user, drafter)

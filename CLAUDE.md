@@ -4,8 +4,7 @@ Multi-tenant operations platform: organizations capture, route, assign, and trac
 This is a **learning-focused** project: explain significant concepts, ask 3–5 check questions after each feature (withhold answers).
 
 ## Current phase
-Phase 2 — V1 frontend (`frontend/`: Next.js 16 App Router, TypeScript, Tailwind, TanStack Query).
-Phase 1 backend is complete. See `docs/`.
+Phase 4: AI features (request drafts done; evals next). Phases 1–3 (backend, frontend, CI/hardening/metrics) complete. See `docs/`.
 
 ## Frontend rules
 - Next.js 16 has breaking changes: read `frontend/node_modules/next/dist/docs/` before using an API.
@@ -16,7 +15,13 @@ Phase 1 backend is complete. See `docs/`.
 - Never `next build` in `frontend/` directly while a dev server may be running; `test:e2e` builds into `.next-e2e`.
 
 ## Hard rules
-- **No AI features in the product yet**: no LLM APIs, LangGraph, RAG, embeddings, pgvector, agents, MCP.
+- **AI features follow docs/ai.md** (first feature: request drafts via Groq free tier):
+  - LLM output is untrusted input: strict schema + Pydantic validation, like any user input.
+  - A human reviews AI output before anything is saved; the model gets no tools and no DB access.
+  - The model never sees or returns database IDs; the server maps names → IDs within the tenant.
+  - The app must work with AI switched off (no key → feature hidden).
+  - Tests never call a real provider (override `get_drafter`); bump `PROMPT_VERSION` on prompt changes.
+  - Still out: RAG, embeddings, pgvector, agents, MCP, until explicitly decided.
 - **No new technology without answering "what problem does this solve in OpsPilot?"** (Redis, queues, K8s, Kafka, cloud are out for now.)
 - **Tenant isolation is a security boundary**:
   - Org ID comes only from the URL path, validated by the `TenantContext` dependency (active membership required).
@@ -29,5 +34,5 @@ Phase 1 backend is complete. See `docs/`.
 - Never edit an applied Alembic migration.
 
 ## Docs (keep concise, update when decisions change)
-- `docs/frontend.md`, `docs/metrics.md`, `docs/architecture.md`, `docs/database.md`, `docs/multi-tenancy.md`, `docs/authentication.md`
+- `docs/frontend.md`, `docs/metrics.md`, `docs/ai.md`, `docs/architecture.md`, `docs/database.md`, `docs/multi-tenancy.md`, `docs/authentication.md`
 - `docs/decisions.md`: short ADRs

@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { FormEvent } from "react";
+import { type FormEvent, useState } from "react";
+
+import { AiDraftNotice, AiDraftPanel } from "@/components/requests/ai-draft-panel";
 
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, PageLoading } from "@/components/ui/feedback";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/field";
+import type { RequestDraft } from "@/lib/ai";
 import { ApiError } from "@/lib/api/client";
+import { useMe } from "@/lib/auth";
 import { useDepartments } from "@/lib/departments";
 import { useCurrentOrg } from "@/lib/org";
 import {
@@ -27,6 +31,10 @@ export default function NewRequestPage() {
   const create = useCreateRequest(organizationId);
   const fieldErrors = create.error instanceof ApiError ? create.error.fieldErrors : {};
   const listHref = `/orgs/${organizationId}/requests`;
+  const aiEnabled = useMe().data?.features.ai_request_drafts ?? false;
+  // A new draft remounts the form fields (via `key`) with the draft as their defaults,
+  // so they stay ordinary, editable, uncontrolled inputs.
+  const [draft, setDraft] = useState<{ version: number; value: RequestDraft } | null>(null);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,7 +74,13 @@ export default function NewRequestPage() {
       </Link>
       <h1 className="mt-3 text-lg font-semibold">New request</h1>
       <p className="mt-1 text-sm text-zinc-600">Describe the problem and where it is. The right team will pick it up.</p>
-      <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
+      {aiEnabled && (
+        <div className="mt-6">
+          <AiDraftPanel orgId={organizationId} onDraft={(value) => setDraft((d) => ({ version: (d?.version ?? 0) + 1, value }))} />
+        </div>
+      )}
+      <form key={draft?.version ?? 0} onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
+        {draft && <AiDraftNotice draft={draft.value} />}
         {create.error && <ErrorAlert error={create.error} />}
         <TextField
           label="What's wrong?"
@@ -75,7 +89,8 @@ export default function NewRequestPage() {
           maxLength={TITLE_MAX_LENGTH}
           placeholder="Wi-Fi keeps dropping in meeting room 2"
           error={fieldErrors.title}
-          autoFocus
+          defaultValue={draft?.value.title}
+          autoFocus={!aiEnabled}
         />
         <TextAreaField
           label="Details"
@@ -83,9 +98,10 @@ export default function NewRequestPage() {
           maxLength={DESCRIPTION_MAX_LENGTH}
           hint="Location, when it started, anything already tried."
           error={fieldErrors.description}
+          defaultValue={draft?.value.description}
         />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <SelectField label="Department" name="department_id" required defaultValue="" error={fieldErrors.department_id}>
+          <SelectField label="Department" name="department_id" required defaultValue={draft?.value.department_id ?? ""} error={fieldErrors.department_id}>
             <option value="" disabled>
               Choose a department
             </option>
@@ -95,7 +111,7 @@ export default function NewRequestPage() {
               </option>
             ))}
           </SelectField>
-          <SelectField label="Priority" name="priority" defaultValue="normal" error={fieldErrors.priority}>
+          <SelectField label="Priority" name="priority" defaultValue={draft?.value.priority ?? "normal"} error={fieldErrors.priority}>
             {REQUEST_PRIORITIES.map((priority) => (
               <option key={priority} value={priority}>
                 {PRIORITY_LABELS[priority]}

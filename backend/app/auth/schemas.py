@@ -43,6 +43,13 @@ class MembershipOut(BaseModel):
     permissions: list[Permission]
 
 
+class FeaturesOut(BaseModel):
+    """Optional capabilities of this deployment (the UI hides what's off)."""
+
+    ai_request_drafts: bool
+
+
 class MeResponse(BaseModel):
     user: UserOut
     memberships: list[MembershipOut]
+    features: FeaturesOut
