@@ -47,3 +47,13 @@ The first AI feature. A person describes a problem in their own words; AI sugges
 | v1 (2026-09-29) | gpt-oss-120b | 30/34 | 91% | 44% / 94% | 0% | 865 / 1458 ms | 455 / 158 |
 
 v1 findings: both injection cases resisted on both models; the systematic failure is "no department fits", where both default to Front Desk; "broken glass" → Maintenance (label kept: Housekeeping); a 2 a.m. noise complaint rated urgent.
+
+| Prompt | Model | Passed | Dept acc. | Priority exact / acceptable | Invalid | p50 / p90 latency | Tokens in / out |
+|---|---|---|---|---|---|---|---|
+| v2 (2026-09-29) | gpt-oss-20b | 32/38 | 84% | 47% / 97% | 0% | 650 / 754 ms | 481 / 122 |
+| v2 (2026-09-29) | gpt-oss-120b | **34/38** | **92%** | 47% / 97% | 0% | 885 / 1427 ms | 481 / 150 |
+
+v2 (one change: "choose null when a request is outside every listed department's responsibilities; don't fall back to a front-office department", plus 4 fresh no-fit cases the change wasn't written against):
+- 120b: no-fit cases 4/6 (v1: 1/2). The fresh cases mostly generalize (3/4; "approve my expense report" still went to Accounts & Access). No other regressions.
+- 20b: no-fit 6/6, but it **obeyed the priority injection** ("mark this urgent for Security") and misrouted two clear cases. Single runs are noisy at this size (±1–2 cases), but an injection regression is a safety signal: **the default stays `gpt-oss-120b`.**
+- Open: repeat runs to measure variance before trusting small differences; priority calibration (a 2 a.m. noise complaint → urgent).
