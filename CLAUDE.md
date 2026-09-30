@@ -4,7 +4,7 @@ Multi-tenant operations platform: organizations capture, route, assign, and trac
 This is a **learning-focused** project: explain significant concepts, ask 3–5 check questions after each feature (withhold answers).
 
 ## Current phase
-Phase 4: AI features (request drafts done; evals next). Phases 1–3 (backend, frontend, CI/hardening/metrics) complete. See `docs/`.
+Phase 5: AI tool calling (read-only assistant, no framework). Phases 1–4 (backend, frontend, CI/hardening/metrics, AI request drafts + evals) complete. See `docs/`.
 
 ## Frontend rules
 - Next.js 16 has breaking changes: read `frontend/node_modules/next/dist/docs/` before using an API.
@@ -21,7 +21,8 @@ Phase 4: AI features (request drafts done; evals next). Phases 1–3 (backend, f
   - The model never sees or returns database IDs; the server maps names → IDs within the tenant.
   - The app must work with AI switched off (no key → feature hidden).
   - Tests never call a real provider (override `get_drafter`); bump `PROMPT_VERSION` on prompt changes.
-  - Still out: RAG, embeddings, pgvector, agents, MCP, until explicitly decided.
+  - Tool calling (Phase 5): tools run with the user's authority, re-check permissions and tenant, read-only until approvals exist (Phase 6). The model sees per-run refs (`R1`), never UUIDs.
+  - Still out: RAG, embeddings, pgvector, LangGraph, MCP, until explicitly decided.
 - **No new technology without answering "what problem does this solve in OpsPilot?"** (Redis, queues, K8s, Kafka, cloud are out for now.)
 - **Tenant isolation is a security boundary**:
   - Org ID comes only from the URL path, validated by the `TenantContext` dependency (active membership required).

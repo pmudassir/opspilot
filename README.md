@@ -20,6 +20,9 @@ curl localhost:8000/health         # {"status":"ok","database":"ok"}
 
 Maintenance: `uv run python -m scripts.cleanup_expired` removes expired sessions and old login attempts (run daily).
 
+AI (optional; see `docs/ai.md`): set `GROQ_API_KEY` in `backend/.env` to enable AI features; without it they're hidden.
+Evals call the real provider: `uv run python -m evals.request_drafts.run --models openai/gpt-oss-120b`.
+
 ## Frontend — local setup
 
 Requires Node 24+. The backend must be running on port 8000.

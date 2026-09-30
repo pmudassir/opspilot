@@ -30,7 +30,7 @@ Tests: pytest + HTTPX against a real Postgres test DB (not SQLite).
 | Models | schema + DB constraints | — |
 
 ## Out of scope for V1
-AI of any kind, notifications, attachments, SLAs, custom workflows/roles, SSO, email invites, subtasks, recurring work, billing, guest portal, Redis/queues/workers, cloud deployment.
+AI of any kind (since added in Phase 4 as an optional layer: `docs/ai.md`), notifications, attachments, SLAs, custom workflows/roles, SSO, email invites, subtasks, recurring work, billing, guest portal, Redis/queues/workers, cloud deployment.
 
 ## Assumptions
 Internal authenticated requesters only · small scale (tens of orgs, thousands of requests) · fixed roles and lifecycle for all orgs · `timestamptz` UTC · Python 3.13 + uv · PostgreSQL 17+ via Docker Compose (Postgres only).
