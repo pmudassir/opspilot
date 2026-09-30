@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/ai/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask */
+        post: operations["ask_api_v1_orgs__org_id__ai_assistant_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/ai/request-drafts": {
         parameters: {
             query?: never;
@@ -417,6 +434,13 @@ export interface components {
             password: string;
             role: components["schemas"]["MembershipRole"];
         };
+        /** AskBody */
+        AskBody: {
+            /** Question */
+            question: string;
+            /** Request Id */
+            request_id?: string | null;
+        };
         /** AssignBody */
         AssignBody: {
             /**
@@ -424,6 +448,25 @@ export interface components {
              * Format: uuid
              */
             assignee_membership_id: string;
+        };
+        /**
+         * AssistantAnswerOut
+         * @description Read-only: nothing was changed. `references` link the refs (R1, ...) in `answer`.
+         */
+        AssistantAnswerOut: {
+            /** Answer */
+            answer: string;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Model */
+            model: string;
+            /** References */
+            references: components["schemas"]["ReferenceOut"][];
+            /** Tools Used */
+            tools_used: components["schemas"]["ToolUseOut"][];
         };
         /** CommentOut */
         CommentOut: {
@@ -523,6 +566,8 @@ export interface components {
          * @description Optional capabilities of this deployment (the UI hides what's off).
          */
         FeaturesOut: {
+            /** Ai Assistant */
+            ai_assistant: boolean;
             /** Ai Request Drafts */
             ai_request_drafts: boolean;
         };
@@ -659,6 +704,18 @@ export interface components {
              */
             membership_id: string;
         };
+        /** ReferenceOut */
+        ReferenceOut: {
+            /** Ref */
+            ref: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Title */
+            title: string;
+        };
         /**
          * RequestAction
          * @enum {string}
@@ -781,6 +838,17 @@ export interface components {
             organization_name: string;
             /** Password */
             password: string;
+        };
+        /**
+         * ToolCallStatus
+         * @enum {string}
+         */
+        ToolCallStatus: "ok" | "repeated" | "invalid_arguments" | "not_found" | "forbidden" | "ambiguous" | "unknown_tool" | "timeout" | "internal";
+        /** ToolUseOut */
+        ToolUseOut: {
+            status: components["schemas"]["ToolCallStatus"];
+            /** Tool */
+            tool: string;
         };
         /** UpdateMemberRequest */
         UpdateMemberRequest: {
@@ -967,6 +1035,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_api_v1_orgs__org_id__ai_assistant_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: {
+                opspilot_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantAnswerOut"];
                 };
             };
             /** @description Validation Error */

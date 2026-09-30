@@ -3,9 +3,10 @@ the viewer's visibility (members only see requests they created)."""
 
 import uuid
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, NamedTuple
 
-from sqlalchemy import ColumnElement, Select, select, true, tuple_
+from sqlalchemy import ColumnElement, Select, func, select, true, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -174,25 +175,59 @@ async def get_request(
     return await _get_row(session, organization_id, request_id, viewer)
 
 
+@dataclass(frozen=True)
+class RequestFilters:
+    """What to match. Filters combine with AND; list and count share them, so a count
+    always describes exactly the rows a list would page through."""
+
+    statuses: list[RequestStatus] | None = None
+    department_id: uuid.UUID | None = None
+    priorities: list[RequestPriority] | None = None
+    assignee_membership_id: uuid.UUID | None = None
+    unassigned: bool = False
+    requester_membership_id: uuid.UUID | None = None
+    title_contains: str | None = None
+    created_within: timedelta | None = None
+
+    def __post_init__(self) -> None:
+        if self.unassigned and self.assignee_membership_id is not None:
+            raise ValueError("Filter by an assignee or by unassigned, not both")
+
+    def conditions(self) -> list[ColumnElement[bool]]:
+        conditions: list[ColumnElement[bool]] = []
+        if self.statuses:
+            conditions.append(Request.status.in_(self.statuses))
+        if self.department_id is not None:
+            conditions.append(Request.department_id == self.department_id)
+        if self.priorities:
+            conditions.append(Request.priority.in_(self.priorities))
+        if self.assignee_membership_id is not None:
+            conditions.append(Request.assignee_membership_id == self.assignee_membership_id)
+        if self.unassigned:
+            conditions.append(Request.assignee_membership_id.is_(None))
+        if self.requester_membership_id is not None:
+            conditions.append(Request.requester_membership_id == self.requester_membership_id)
+        if self.title_contains:
+            # autoescape: "%" and "_" in the search text match literally, not as wildcards.
+            # Unindexed substring scan: fine at V1 scale (pg_trgm if it ever isn't).
+            conditions.append(Request.title.icontains(self.title_contains, autoescape=True))
+        if self.created_within is not None:
+            conditions.append(Request.created_at >= func.now() - self.created_within)  # DB clock
+        return conditions
+
+
 async def list_requests(
     session: AsyncSession,
     organization_id: uuid.UUID,
     viewer: Viewer,
+    filters: RequestFilters,
     *,
-    statuses: list[RequestStatus] | None,
-    department_id: uuid.UUID | None,
-    priority: RequestPriority | None,
     limit: int,
     after: KeysetCursor | None,
 ) -> tuple[list[RequestRow], KeysetCursor | None]:
-    """Newest first. Returns one page plus the cursor for the next page (None at the end)."""
-    query = _request_rows(organization_id).where(_visible_to(viewer))
-    if statuses:
-        query = query.where(Request.status.in_(statuses))
-    if department_id is not None:
-        query = query.where(Request.department_id == department_id)
-    if priority is not None:
-        query = query.where(Request.priority == priority)
+    """Newest first. Returns one page plus the cursor for the next page (None at the end).
+    Visibility and the organization scope always apply."""
+    query = _request_rows(organization_id).where(_visible_to(viewer), *filters.conditions())
     if after is not None:
         query = query.where(tuple_(Request.created_at, Request.id) < (after.created_at, after.id))
 
@@ -206,6 +241,17 @@ async def list_requests(
         KeysetCursor(page[-1].request.created_at, page[-1].request.id) if has_more else None
     )
     return page, next_cursor
+
+
+async def count_requests(
+    session: AsyncSession, organization_id: uuid.UUID, viewer: Viewer, filters: RequestFilters
+) -> int:
+    count = await session.scalar(
+        select(func.count())
+        .select_from(Request)
+        .where(Request.organization_id == organization_id, _visible_to(viewer), *filters.conditions())
+    )
+    return count or 0
 
 
 async def list_events(
@@ -228,3 +274,19 @@ async def list_events(
         .order_by(RequestEvent.created_at, RequestEvent.id)
     )
     return [EventRow(*row) for row in result]
+
+
+async def request_titles(
+    session: AsyncSession, organization_id: uuid.UUID, viewer: Viewer, request_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Titles of the given requests that exist in this org and are visible to the viewer."""
+    if not request_ids:
+        return {}
+    result = await session.execute(
+        select(Request.id, Request.title).where(
+            Request.organization_id == organization_id,
+            Request.id.in_(request_ids),
+            _visible_to(viewer),
+        )
+    )
+    return {request_id: title for request_id, title in result}

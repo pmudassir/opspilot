@@ -10,8 +10,11 @@ import { isUnauthorized } from "@/lib/api/client";
 import { useLogout, useMe } from "@/lib/auth";
 import { OrgContext, type Permission } from "@/lib/org";
 
-const NAV: { href: string; label: string; permission: Permission }[] = [
+type Feature = "ai_assistant";
+
+const NAV: { href: string; label: string; permission: Permission; feature?: Feature }[] = [
   { href: "requests", label: "Requests", permission: "requests:read" },
+  { href: "ask", label: "Ask", permission: "requests:read", feature: "ai_assistant" },
   { href: "members", label: "Members", permission: "members:read" },
   { href: "departments", label: "Departments", permission: "departments:read" },
   { href: "metrics", label: "Metrics", permission: "metrics:read" },
@@ -70,7 +73,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="text-sm font-semibold tracking-tight text-teal-800">OpsPilot</span>
           <OrgSwitcher currentOrgId={orgId} memberships={me.data.memberships} />
           <nav className="order-last -mx-1 flex w-full gap-1 overflow-x-auto sm:order-none sm:mx-0 sm:w-auto">
-            {NAV.filter((item) => org.can(item.permission)).map((item) => {
+            {NAV.filter((item) => org.can(item.permission) && (!item.feature || me.data.features[item.feature])).map((item) => {
               const href = `/orgs/${orgId}/${item.href}`;
               const active = pathname.startsWith(href);
               return (

@@ -10,6 +10,7 @@ import { Timeline } from "@/components/requests/timeline";
 import { PriorityLabel, StatusBadge } from "@/components/ui/badge";
 import { ErrorAlert, PageLoading } from "@/components/ui/feedback";
 import { ApiError } from "@/lib/api/client";
+import { useMe } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { useCurrentOrg } from "@/lib/org";
 import { type RequestItem, useComments, useRequest, useRequestEvents } from "@/lib/requests";
@@ -76,9 +77,20 @@ export default function RequestDetailPage() {
             <RequestActions orgId={organizationId} request={data} />
           </section>
           <Details request={data} />
+          <AskAboutThis orgId={organizationId} requestId={requestId} />
         </aside>
       </div>
     </article>
+  );
+}
+
+function AskAboutThis({ orgId, requestId }: { orgId: string; requestId: string }) {
+  const enabled = useMe().data?.features.ai_assistant ?? false;
+  if (!enabled) return null;
+  return (
+    <Link href={`/orgs/${orgId}/ask?request=${requestId}`} className="text-sm font-medium text-teal-800 hover:underline">
+      Ask about this request →
+    </Link>
   );
 }
 

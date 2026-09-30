@@ -34,6 +34,34 @@
         "title": "AddMemberRequest",
         "type": "object"
       },
+      "AskBody": {
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskBody",
+        "type": "object"
+      },
       "AssignBody": {
         "additionalProperties": false,
         "properties": {
@@ -47,6 +75,47 @@
           "assignee_membership_id"
         ],
         "title": "AssignBody",
+        "type": "object"
+      },
+      "AssistantAnswerOut": {
+        "description": "Read-only: nothing was changed. `references` link the refs (R1, ...) in `answer`.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceOut"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "tools_used": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUseOut"
+            },
+            "title": "Tools Used",
+            "type": "array"
+          }
+        },
+        "required": [
+          "answer",
+          "references",
+          "tools_used",
+          "model",
+          "as_of"
+        ],
+        "title": "AssistantAnswerOut",
         "type": "object"
       },
       "CommentOut": {
@@ -280,13 +349,18 @@
       "FeaturesOut": {
         "description": "Optional capabilities of this deployment (the UI hides what's off).",
         "properties": {
+          "ai_assistant": {
+            "title": "Ai Assistant",
+            "type": "boolean"
+          },
           "ai_request_drafts": {
             "title": "Ai Request Drafts",
             "type": "boolean"
           }
         },
         "required": [
-          "ai_request_drafts"
+          "ai_request_drafts",
+          "ai_assistant"
         ],
         "title": "FeaturesOut",
         "type": "object"
@@ -630,6 +704,30 @@
           "full_name"
         ],
         "title": "PersonOut",
+        "type": "object"
+      },
+      "ReferenceOut": {
+        "properties": {
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "request_id",
+          "title"
+        ],
+        "title": "ReferenceOut",
         "type": "object"
       },
       "RequestAction": {
@@ -992,6 +1090,38 @@
         "title": "SignupRequest",
         "type": "object"
       },
+      "ToolCallStatus": {
+        "enum": [
+          "ok",
+          "repeated",
+          "invalid_arguments",
+          "not_found",
+          "forbidden",
+          "ambiguous",
+          "unknown_tool",
+          "timeout",
+          "internal"
+        ],
+        "title": "ToolCallStatus",
+        "type": "string"
+      },
+      "ToolUseOut": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ToolCallStatus"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "status"
+        ],
+        "title": "ToolUseOut",
+        "type": "object"
+      },
       "UpdateMemberRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1320,6 +1450,75 @@
         "summary": "Get Organization",
         "tags": [
           "organizations"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/assistant": {
+      "post": {
+        "operationId": "ask_api_v1_orgs__org_id__ai_assistant_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "opspilot_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Opspilot Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAnswerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ask",
+        "tags": [
+          "ai"
         ]
       }
     },

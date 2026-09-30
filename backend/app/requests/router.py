@@ -78,9 +78,11 @@ async def list_requests(
         session,
         context.organization_id,
         _viewer(context),
-        statuses=status_filter,
-        department_id=department_id,
-        priority=priority,
+        service.RequestFilters(
+            statuses=status_filter,
+            department_id=department_id,
+            priorities=[priority] if priority else None,
+        ),
         limit=limit,
         after=decode_cursor(cursor) if cursor else None,
     )
