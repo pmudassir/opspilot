@@ -64,25 +64,26 @@ class RequestDraftResult:
     model: str
 
 
-async def _ensure_quota(
-    session: AsyncSession, organization_id: uuid.UUID, membership_id: uuid.UUID, per_hour: int
-) -> None:
-    """Every attempt counts (failures cost provider quota too)."""
+async def quota_retry_after(
+    session: AsyncSession, organization_id: uuid.UUID, membership_id: uuid.UUID, *, feature: str, per_hour: int
+) -> int | None:
+    """Seconds until this member may use `feature` again, or None if under quota.
+    Every attempt counts (failures cost provider quota too)."""
     count, oldest = (
         await session.execute(
             select(func.count(), func.min(AIUsage.created_at)).where(
                 AIUsage.organization_id == organization_id,
                 AIUsage.membership_id == membership_id,
-                AIUsage.feature == FEATURE,
+                AIUsage.feature == feature,
                 AIUsage.created_at > func.now() - QUOTA_WINDOW,
             )
         )
     ).one()
     if count < per_hour:
-        return
+        return None
     now = await session.scalar(select(func.now()))
     assert now is not None and oldest is not None
-    raise AIQuotaExceededError(max(1, math.ceil((oldest + QUOTA_WINDOW - now).total_seconds())))
+    return max(1, math.ceil((oldest + QUOTA_WINDOW - now).total_seconds()))
 
 
 async def _record(
@@ -123,8 +124,15 @@ async def draft_request(
 ) -> RequestDraftResult:
     if drafter is None:
         raise AIUnavailableError
-    await _ensure_quota(session, organization_id, membership_id, quota_per_hour)
+    retry_after = await quota_retry_after(
+        session, organization_id, membership_id, feature=FEATURE, per_hour=quota_per_hour
+    )
+    if retry_after is not None:
+        raise AIQuotaExceededError(retry_after)
     departments = await list_departments(session, organization_id)
+    # End the read transaction: the provider call can take seconds, and an open
+    # transaction would pin a pooled connection ("idle in transaction") meanwhile.
+    await session.commit()
 
     started = time.perf_counter()
     record = dict(organization_id=organization_id, membership_id=membership_id, drafter=drafter, started=started)

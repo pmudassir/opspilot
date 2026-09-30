@@ -1,16 +1,17 @@
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.dependencies import get_drafter
 from app.ai.drafter import DrafterError, DraftFailure, ModelDraft, TokenUsage
 from app.ai.models import AIUsage
 from app.config import get_settings
+from app.db import engine
 from app.requests.models import Request, RequestPriority
 from tests.helpers import (
     add_member_id,
@@ -43,9 +44,12 @@ class FakeDrafter:
     provider: str = "fake"
     model: str = "fake-model-1"
     calls: list[tuple[str, list[str]]] = field(default_factory=list)
+    during_call: Callable[[], Awaitable[None]] | None = None
 
     async def draft(self, *, text: str, departments: list[str]) -> ModelDraft:
         self.calls.append((text, departments))
+        if self.during_call:
+            await self.during_call()
         if self.error:
             raise self.error
         assert self.result is not None
@@ -125,6 +129,29 @@ async def test_successful_calls_are_recorded_for_cost_and_latency(
     assert (usage.input_tokens, usage.output_tokens) == (412, 96)
     assert usage.latency_ms >= 0
     assert usage.prompt_version.startswith("request-draft-")
+
+
+async def test_no_database_transaction_is_held_open_during_the_provider_call(
+    org: Org, drafter: FakeDrafter
+) -> None:
+    # A provider call can take many seconds; an open transaction would pin a pooled
+    # connection ("idle in transaction") for all that time.
+    idle_in_transaction: list[int] = []
+
+    async def count_idle_transactions() -> None:
+        async with engine.connect() as connection:
+            idle_in_transaction.append(
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
+                        " AND state = 'idle in transaction' AND pid <> pg_backend_pid()"
+                    )
+                )
+            )
+
+    drafter.during_call = count_idle_transactions
+    assert (await draft(org.admin, org.org_id)).status_code == 200
+    assert idle_in_transaction == [0]
 
 
 @pytest.mark.parametrize(
