@@ -31,6 +31,8 @@ export default defineConfig({
         ...process.env,
         DATABASE_URL: E2E_DATABASE_URL,
         ALLOWED_ORIGINS: JSON.stringify([BASE_URL]),
+        // AI off, even if backend/.env has a real key: e2e must never call the provider.
+        GROQ_API_KEY: "",
       } as Record<string, string>,
       reuseExistingServer: false,
       timeout: 120_000,
