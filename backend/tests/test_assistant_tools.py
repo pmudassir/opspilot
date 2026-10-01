@@ -288,6 +288,17 @@ async def test_history_merges_events_and_comments_without_ids(db_session: AsyncS
     assert result["data"]["omitted_older"] == 0
 
 
+async def test_history_explains_priority_changes(db_session: AsyncSession, org: Org) -> None:
+    url = org_url(str(org.org_id), f"/requests/{org.requests['printer']}/change-priority")
+    assert (await org.admin.post(url, json={"priority": "urgent"})).status_code == 200
+    refs = RefRegistry()
+    ref = refs.ref_for(org.requests["printer"])
+    result, _ = await call(executor(db_session, org, "manager", refs), "get_request_history", {"ref": ref})
+    change = result["data"]["history"][-1]
+    assert change["event"] == "priority_changed"
+    assert (change["from_priority"], change["to_priority"]) == ("high", "urgent")
+
+
 # --- departments, status, staff: permissions -----------------------------------
 
 

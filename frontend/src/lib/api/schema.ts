@@ -297,6 +297,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/requests/{request_id}/change-priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change Request Priority */
+        post: operations["change_request_priority_api_v1_orgs__org_id__requests__request_id__change_priority_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/requests/{request_id}/claim": {
         parameters: {
             query?: never;
@@ -467,6 +484,10 @@ export interface components {
             references: components["schemas"]["ReferenceOut"][];
             /** Tools Used */
             tools_used: components["schemas"]["ToolUseOut"][];
+        };
+        /** ChangePriorityBody */
+        ChangePriorityBody: {
+            priority: components["schemas"]["RequestPriority"];
         };
         /** CommentOut */
         CommentOut: {
@@ -693,7 +714,7 @@ export interface components {
          * Permission
          * @enum {string}
          */
-        Permission: "organization:read" | "departments:read" | "departments:manage" | "members:read" | "members:manage" | "requests:create" | "requests:read" | "requests:read_all" | "requests:comment" | "requests:assign" | "requests:claim" | "requests:work" | "requests:work_any" | "requests:cancel_any" | "metrics:read";
+        Permission: "organization:read" | "departments:read" | "departments:manage" | "members:read" | "members:manage" | "requests:create" | "requests:read" | "requests:read_all" | "requests:comment" | "requests:assign" | "requests:claim" | "requests:work" | "requests:work_any" | "requests:cancel_any" | "requests:prioritize" | "metrics:read";
         /** PersonOut */
         PersonOut: {
             /** Full Name */
@@ -720,7 +741,7 @@ export interface components {
          * RequestAction
          * @enum {string}
          */
-        RequestAction: "assign" | "claim" | "unassign" | "start" | "complete" | "cancel";
+        RequestAction: "assign" | "claim" | "unassign" | "start" | "complete" | "cancel" | "change_priority";
         /** RequestDraftBody */
         RequestDraftBody: {
             /** Text */
@@ -770,7 +791,7 @@ export interface components {
          * RequestEventType
          * @enum {string}
          */
-        RequestEventType: "created" | "assigned" | "unassigned" | "status_changed";
+        RequestEventType: "created" | "assigned" | "unassigned" | "status_changed" | "priority_changed";
         /** RequestOut */
         RequestOut: {
             /** Allowed Actions */
@@ -1596,6 +1617,44 @@ export interface operations {
             };
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_request_priority_api_v1_orgs__org_id__requests__request_id__change_priority_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+                org_id: string;
+            };
+            cookie?: {
+                opspilot_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePriorityBody"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

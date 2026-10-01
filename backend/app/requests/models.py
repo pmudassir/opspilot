@@ -44,6 +44,7 @@ class RequestEventType(StrEnum):
     ASSIGNED = "assigned"
     UNASSIGNED = "unassigned"
     STATUS_CHANGED = "status_changed"
+    PRIORITY_CHANGED = "priority_changed"
 
 
 class Request(UUIDPrimaryKeyMixin, TimestampMixin, Base):

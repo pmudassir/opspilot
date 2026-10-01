@@ -22,6 +22,11 @@ function event(overrides: Partial<RequestEvent>): RequestEvent {
 describe("describeEvent", () => {
   it.each([
     [event({}), "Sam Okafor reported this request"],
+    [
+      event({ event_type: "priority_changed", to_status: null, data: { from_priority: "normal", to_priority: "urgent" } }),
+      "Sam Okafor changed the priority from normal to urgent",
+    ],
+    [event({ event_type: "priority_changed", to_status: null, data: {} }), "Sam Okafor changed the priority"],
     [event({ event_type: "assigned", data: { claimed: true } }), "Sam Okafor claimed this request"],
     [event({ event_type: "assigned", data: { assignee_name: "Ana" } }), "Sam Okafor assigned it to Ana"],
     [

@@ -15,6 +15,7 @@ from app.requests import lifecycle, service
 from app.requests.models import RequestPriority, RequestStatus
 from app.requests.schemas import (
     AssignBody,
+    ChangePriorityBody,
     CreateRequestBody,
     RequestEventOut,
     RequestOut,
@@ -167,4 +168,17 @@ async def cancel_request(
     request_id: uuid.UUID, context: RequestReader, session: SessionDep  # type: ignore[valid-type]
 ) -> RequestOut:
     row = await lifecycle.cancel(session, context.organization_id, request_id, context.membership)
+    return await _one_out(session, context, row)
+
+
+@router.post("/{request_id}/change-priority")
+async def change_request_priority(
+    request_id: uuid.UUID,
+    body: ChangePriorityBody,
+    context: RequestReader,  # type: ignore[valid-type]
+    session: SessionDep,
+) -> RequestOut:
+    row = await lifecycle.change_priority(
+        session, context.organization_id, request_id, context.membership, body.priority
+    )
     return await _one_out(session, context, row)

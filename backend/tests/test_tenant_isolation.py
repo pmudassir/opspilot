@@ -73,6 +73,7 @@ ORG_ROUTES = [
     RouteCase("POST", "/requests/{request_id}/start"),
     RouteCase("POST", "/requests/{request_id}/complete"),
     RouteCase("POST", "/requests/{request_id}/cancel"),
+    RouteCase("POST", "/requests/{request_id}/change-priority", {"priority": "urgent"}),
     RouteCase("GET", "/requests/{request_id}/comments"),
     RouteCase("POST", "/requests/{request_id}/comments", {"body": "Injected"}),
     RouteCase("GET", "/metrics"),

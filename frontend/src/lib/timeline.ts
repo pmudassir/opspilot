@@ -1,4 +1,4 @@
-import type { Comment, RequestEvent } from "@/lib/requests";
+import { type Comment, PRIORITY_LABELS, type RequestEvent, type RequestPriority } from "@/lib/requests";
 
 export type TimelineItem =
   | { kind: "event"; at: string; event: RequestEvent }
@@ -32,6 +32,13 @@ export function describeEvent(event: RequestEvent): string {
     }
     case "unassigned":
       return `${actor} unassigned it`;
+    case "priority_changed": {
+      const from = dataString(event, "from_priority");
+      const to = dataString(event, "to_priority");
+      if (!from || !to || !(from in PRIORITY_LABELS) || !(to in PRIORITY_LABELS)) return `${actor} changed the priority`;
+      const label = (value: string) => PRIORITY_LABELS[value as RequestPriority].toLowerCase();
+      return `${actor} changed the priority from ${label(from)} to ${label(to)}`;
+    }
     case "status_changed":
       switch (event.to_status) {
         case "in_progress":

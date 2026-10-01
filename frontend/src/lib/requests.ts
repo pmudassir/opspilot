@@ -180,11 +180,12 @@ export const ACTION_LABELS: Record<RequestAction, string> = {
   assign: "Assign",
   unassign: "Unassign",
   cancel: "Cancel request",
+  change_priority: "Change priority",
 };
 
-type ActionInput = { action: RequestAction; assigneeMembershipId?: string };
+type ActionInput = { action: RequestAction; assigneeMembershipId?: string; priority?: RequestPriority };
 
-function performAction(orgId: string, requestId: string, { action, assigneeMembershipId }: ActionInput) {
+function performAction(orgId: string, requestId: string, { action, assigneeMembershipId, priority }: ActionInput) {
   const params = requestPath(orgId, requestId);
   switch (action) {
     case "assign":
@@ -205,6 +206,11 @@ function performAction(orgId: string, requestId: string, { action, assigneeMembe
       return unwrap(api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/complete", { params }));
     case "cancel":
       return unwrap(api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/cancel", { params }));
+    case "change_priority":
+      if (!priority) throw new Error("change_priority requires a priority");
+      return unwrap(
+        api.POST("/api/v1/orgs/{org_id}/requests/{request_id}/change-priority", { params, body: { priority } }),
+      );
     default: {
       const unhandled: never = action;
       throw new Error(`Unknown action ${String(unhandled)}`);

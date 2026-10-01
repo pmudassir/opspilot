@@ -5,7 +5,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/feedback";
 import { useDepartmentMembers } from "@/lib/departments";
-import { ACTION_LABELS, type RequestAction, type RequestItem, useRequestAction } from "@/lib/requests";
+import {
+  ACTION_LABELS,
+  PRIORITY_LABELS,
+  REQUEST_PRIORITIES,
+  type RequestAction,
+  type RequestItem,
+  type RequestPriority,
+  useRequestAction,
+} from "@/lib/requests";
 
 // Simple one-click actions, in the order people usually need them.
 const QUICK_ACTIONS: { action: RequestAction; variant: "primary" | "secondary" }[] = [
@@ -47,6 +55,7 @@ export function RequestActions({ orgId, request }: { orgId: string; request: Req
       {allowed.has("assign") && (
         <AssignPicker orgId={orgId} request={request} perform={perform} />
       )}
+      {allowed.has("change_priority") && <PriorityPicker request={request} perform={perform} />}
       {allowed.has("cancel") && <CancelButton perform={perform} />}
     </div>
   );
@@ -111,6 +120,41 @@ function AssignPicker({
         pending={perform.isPending && perform.variables?.action === "assign"}
       >
         {ACTION_LABELS.assign}
+      </Button>
+    </form>
+  );
+}
+
+function PriorityPicker({ request, perform }: { request: RequestItem; perform: Perform }) {
+  const [priority, setPriority] = useState<RequestPriority>(request.priority);
+  return (
+    <form
+      className="flex gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        perform.mutate({ action: "change_priority", priority });
+      }}
+    >
+      <select
+        aria-label="Priority"
+        value={priority}
+        onChange={(event) => setPriority(event.target.value as RequestPriority)}
+        className="h-8 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2 text-sm"
+      >
+        {REQUEST_PRIORITIES.map((option) => (
+          <option key={option} value={option}>
+            {PRIORITY_LABELS[option]}
+          </option>
+        ))}
+      </select>
+      <Button
+        type="submit"
+        variant="secondary"
+        size="sm"
+        disabled={priority === request.priority || perform.isPending}
+        pending={perform.isPending && perform.variables?.action === "change_priority"}
+      >
+        {ACTION_LABELS.change_priority}
       </Button>
     </form>
   );

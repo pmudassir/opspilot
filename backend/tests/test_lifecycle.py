@@ -300,7 +300,7 @@ def force_concurrent_writes(monkeypatch: pytest.MonkeyPatch) -> None:
     both_arrived = asyncio.Event()
 
     async def rendezvous_then_compare_and_set(
-        session: AsyncSession, request: Any, values: dict[str, Any]
+        session: AsyncSession, request: Any, values: dict[str, Any], **guards: Any
     ) -> bool:
         nonlocal arrived
         arrived += 1
@@ -308,7 +308,7 @@ def force_concurrent_writes(monkeypatch: pytest.MonkeyPatch) -> None:
             both_arrived.set()
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(both_arrived.wait(), RENDEZVOUS_TIMEOUT_SECONDS)
-        return await original(session, request, values)
+        return await original(session, request, values, **guards)
 
     monkeypatch.setattr(lifecycle, "_compare_and_set", rendezvous_then_compare_and_set)
 
@@ -339,7 +339,8 @@ async def test_cancel_racing_assign_leaves_a_consistent_request(
 
 # --- allowed_actions: what the UI shows must equal what the API permits ----------
 
-LIFECYCLE_ACTIONS = ["assign", "claim", "unassign", "start", "complete", "cancel"]
+LIFECYCLE_ACTIONS = ["assign", "claim", "unassign", "start", "complete", "cancel", "change_priority"]
+ACTION_BODIES: dict[str, dict[str, str]] = {"change_priority": {"priority": "urgent"}}
 
 
 async def request_in_state(team: Team, state: str) -> str:
@@ -374,12 +375,12 @@ async def advertised(team: Team, who: str, request_id: str) -> list[str]:
         ("open", "mia", ["cancel"]),  # requester, while open
         ("open", "agent", ["claim"]),  # in the department
         ("open", "hk_agent", []),  # different department
-        ("open", "manager", ["assign", "claim", "cancel"]),  # manager is also in IT
-        ("open", "admin", ["assign", "cancel"]),  # admin isn't in IT: can't claim
+        ("open", "manager", ["assign", "claim", "cancel", "change_priority"]),  # manager is also in IT
+        ("open", "admin", ["assign", "cancel", "change_priority"]),  # admin isn't in IT: can't claim
         ("assigned", "agent", ["start"]),  # the assignee
         ("assigned", "agent2", []),  # same department, not the assignee
         ("assigned", "mia", []),  # requester can't cancel once assigned
-        ("in_progress", "manager", ["assign", "unassign", "complete", "cancel"]),
+        ("in_progress", "manager", ["assign", "unassign", "complete", "cancel", "change_priority"]),
         ("completed", "admin", []),
     ],
 )
@@ -400,8 +401,8 @@ async def test_allowed_actions_are_exactly_what_the_api_permits(
 
     for action in LIFECYCLE_ACTIONS:
         request_id = await request_in_state(team, state)
-        body = {"assignee_membership_id": team.ids["agent2"]} if action == "assign" else None
-        response = await act(client_for(team, who), team.org_id, request_id, action, body)
+        body = {"assignee_membership_id": team.ids["agent2"]} if action == "assign" else ACTION_BODIES.get(action)
+        response = await act(client_for(team, who), team.org_id, request_id, action.replace("_", "-"), body)
 
         assert (response.status_code == 200) == (action in listed), (
             f"{who} → {action} on {state}: advertised={sorted(listed)}, "
@@ -413,3 +414,51 @@ async def test_list_items_carry_allowed_actions(team: Team) -> None:
     items = (await team.clients["agent"].get(org_url(team.org_id, "/requests"))).json()["items"]
 
     assert [item["allowed_actions"] for item in items] == [["claim"]]
+
+
+# --- change priority ------------------------------------------------------------
+
+
+async def change_priority(team: Team, who: str, priority: str) -> Response:
+    return await team.act(who, "change-priority", priority=priority)
+
+
+async def test_manager_changes_priority_with_an_event(team: Team) -> None:
+    response = await change_priority(team, "manager", "urgent")
+    assert response.status_code == 200, response.text
+    assert response.json()["priority"] == "urgent"
+    event = (await team.events())[-1]
+    assert event["event_type"] == "priority_changed"
+    assert event["data"] == {"from_priority": "normal", "to_priority": "urgent"}
+    assert event["actor"]["membership_id"] == team.ids["manager"]
+
+
+async def test_same_priority_is_a_no_op(team: Team) -> None:
+    assert (await change_priority(team, "manager", "normal")).status_code == 200
+    assert [e["event_type"] for e in await team.events()] == ["created"]
+
+
+@pytest.mark.parametrize(("who", "status"), [("agent", 403), ("mia", 403), ("max", 404)])
+async def test_only_supervisors_change_priority(team: Team, who: str, status: int) -> None:
+    # Mia reported it but may not re-prioritise; Max can't even see it.
+    assert (await change_priority(team, who, "urgent")).status_code == status
+    assert (await team.request())["priority"] == "normal"
+
+
+async def test_closed_requests_keep_their_priority(team: Team) -> None:
+    assert (await team.act("admin", "cancel")).status_code == 200
+    assert (await change_priority(team, "manager", "urgent")).status_code == 409
+
+
+async def test_priority_must_be_valid(team: Team) -> None:
+    assert (await change_priority(team, "manager", "critical")).status_code == 422
+
+
+async def test_concurrent_priority_changes_have_exactly_one_winner(
+    team: Team, force_concurrent_writes: None
+) -> None:
+    responses = await asyncio.gather(change_priority(team, "manager", "urgent"), change_priority(team, "admin", "low"))
+    assert sorted(r.status_code for r in responses) == [200, 409]
+    winner = next(r for r in responses if r.status_code == 200).json()["priority"]
+    assert (await team.request())["priority"] == winner
+    assert [e["event_type"] for e in await team.events()] == ["created", "priority_changed"]

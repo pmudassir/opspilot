@@ -29,6 +29,8 @@ class Permission(StrEnum):
     REQUESTS_WORK_ANY = "requests:work_any"
     # Cancel any non-terminal request (requesters may always cancel their own while OPEN).
     REQUESTS_CANCEL_ANY = "requests:cancel_any"
+    # Change the priority of any active request.
+    REQUESTS_PRIORITIZE = "requests:prioritize"
     METRICS_READ = "metrics:read"
 
 
@@ -51,6 +53,7 @@ _SUPERVISORS = _STAFF | {
     Permission.REQUESTS_ASSIGN,
     Permission.REQUESTS_WORK_ANY,
     Permission.REQUESTS_CANCEL_ANY,
+    Permission.REQUESTS_PRIORITIZE,
     Permission.METRICS_READ,
 }
 

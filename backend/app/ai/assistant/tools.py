@@ -264,6 +264,8 @@ async def get_request_history(env: ToolEnv, args: RequestRefArgs) -> ToolResult:
                 # Event data also holds membership ids: pass on only what's safe and useful.
                 "assignee": e.event.data.get("assignee_name"),
                 "claimed": e.event.data.get("claimed"),
+                "from_priority": e.event.data.get("from_priority"),
+                "to_priority": e.event.data.get("to_priority"),
             },
         )
         for e in events

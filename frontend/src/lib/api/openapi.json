@@ -118,6 +118,19 @@
         "title": "AssistantAnswerOut",
         "type": "object"
       },
+      "ChangePriorityBody": {
+        "additionalProperties": false,
+        "properties": {
+          "priority": {
+            "$ref": "#/components/schemas/RequestPriority"
+          }
+        },
+        "required": [
+          "priority"
+        ],
+        "title": "ChangePriorityBody",
+        "type": "object"
+      },
       "CommentOut": {
         "properties": {
           "author": {
@@ -682,6 +695,7 @@
           "requests:work",
           "requests:work_any",
           "requests:cancel_any",
+          "requests:prioritize",
           "metrics:read"
         ],
         "title": "Permission",
@@ -737,7 +751,8 @@
           "unassign",
           "start",
           "complete",
-          "cancel"
+          "cancel",
+          "change_priority"
         ],
         "title": "RequestAction",
         "type": "string"
@@ -877,7 +892,8 @@
           "created",
           "assigned",
           "unassigned",
-          "status_changed"
+          "status_changed",
+          "priority_changed"
         ],
         "title": "RequestEventType",
         "type": "string"
@@ -2634,6 +2650,85 @@
           }
         },
         "summary": "Cancel Request",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/requests/{request_id}/change-priority": {
+      "post": {
+        "operationId": "change_request_priority_api_v1_orgs__org_id__requests__request_id__change_priority_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "opspilot_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Opspilot Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePriorityBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Request Priority",
         "tags": [
           "requests"
         ]

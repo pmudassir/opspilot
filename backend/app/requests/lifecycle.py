@@ -13,6 +13,7 @@ UI's buttons and the API's enforcement can never disagree.
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -23,7 +24,12 @@ from app.departments.models import DepartmentMember
 from app.errors import ConflictError, DomainError, ForbiddenError, UnprocessableError
 from app.organizations.models import Membership, MembershipRole, MembershipStatus
 from app.permissions import Permission, has_permission
-from app.requests.models import Request, RequestEventType, RequestStatus
+from app.requests.models import (
+    Request,
+    RequestEventType,
+    RequestPriority,
+    RequestStatus,
+)
 from app.requests.service import RequestRow, get_request, record_event, viewer_for
 from app.users.models import User
 
@@ -35,6 +41,8 @@ class RequestAction(StrEnum):
     START = "start"
     COMPLETE = "complete"
     CANCEL = "cancel"
+    # Not a status transition, but advertised and authorized the same way.
+    CHANGE_PRIORITY = "change_priority"
 
 
 @dataclass(frozen=True)
@@ -79,12 +87,28 @@ _ENTRY_TIMESTAMPS: dict[RequestStatus, dict[str, ColumnElement[Any]]] = {
 
 class InvalidTransitionError(ConflictError):
     def __init__(self, action: RequestAction, status: RequestStatus) -> None:
-        super().__init__(f"Cannot {action} a request that is {status}")
+        super().__init__(f"Cannot {action.replace('_', ' ')} a request that is {status}")
 
 
 class ConcurrentChangeError(ConflictError):
     def __init__(self) -> None:
         super().__init__("The request was changed by someone else. Reload and try again.")
+
+
+class StaleRequestError(ConflictError):
+    """The request changed after someone reviewed it (e.g. an approval preview)."""
+
+    def __init__(self) -> None:
+        super().__init__("The request changed since it was reviewed. Review it again.")
+
+
+@dataclass(frozen=True)
+class Change:
+    """One action and the parameters it needs."""
+
+    action: RequestAction
+    assignee_membership_id: uuid.UUID | None = None  # ASSIGN
+    priority: RequestPriority | None = None  # CHANGE_PRIORITY
 
 
 @dataclass(frozen=True)
@@ -162,6 +186,14 @@ def _cancel_violation(request: Request, actor: Actor, action: RequestAction) -> 
     return None
 
 
+def _priority_violation(request: Request, actor: Actor, action: RequestAction) -> DomainError | None:
+    if request.status not in _ACTIVE:
+        return InvalidTransitionError(action, request.status)
+    if not actor.can(Permission.REQUESTS_PRIORITIZE):
+        return ForbiddenError("Only managers and admins can change a request's priority")
+    return None
+
+
 _RULES: dict[RequestAction, Callable[[Request, Actor, RequestAction], DomainError | None]] = {
     RequestAction.ASSIGN: _assign_violation,
     RequestAction.CLAIM: _claim_violation,
@@ -169,6 +201,7 @@ _RULES: dict[RequestAction, Callable[[Request, Actor, RequestAction], DomainErro
     RequestAction.START: _work_violation,
     RequestAction.COMPLETE: _work_violation,
     RequestAction.CANCEL: _cancel_violation,
+    RequestAction.CHANGE_PRIORITY: _priority_violation,
 }
 
 
@@ -239,22 +272,33 @@ async def _validate_assignee(
 
 
 async def _compare_and_set(
-    session: AsyncSession, request: Request, values: dict[str, Any]
+    session: AsyncSession,
+    request: Request,
+    values: dict[str, Any],
+    *,
+    guard_priority: bool = False,
+    expected_updated_at: datetime | None = None,
 ) -> bool:
     """UPDATE only if status and assignee are still what we authorized against.
 
     Two concurrent actions both pass their checks on the same snapshot; the database
     row lock makes the second UPDATE wait, re-check its WHERE against the committed
     row, and match 0 rows. That 0 is how we detect the lost update.
+    `expected_updated_at` makes it "nothing at all changed since it was reviewed".
     """
+    guards = [
+        Request.organization_id == request.organization_id,
+        Request.id == request.id,
+        Request.status == request.status,
+        Request.assignee_membership_id.is_not_distinct_from(request.assignee_membership_id),
+    ]
+    if guard_priority:
+        guards.append(Request.priority == request.priority)
+    if expected_updated_at is not None:
+        guards.append(Request.updated_at == expected_updated_at)
     result = await session.execute(
         update(Request)
-        .where(
-            Request.organization_id == request.organization_id,
-            Request.id == request.id,
-            Request.status == request.status,
-            Request.assignee_membership_id.is_not_distinct_from(request.assignee_membership_id),
-        )
+        .where(*guards)
         .values(**values, updated_at=func.now())
         .returning(Request.id)
         .execution_options(synchronize_session=False)
@@ -269,16 +313,16 @@ async def _apply(
     action: RequestAction,
     *,
     assignee_membership_id: uuid.UUID | None,
-    data: dict[str, Any] | None = None,
-) -> RequestRow:
+    data: dict[str, Any],
+    expected_updated_at: datetime | None,
+) -> None:
     transition = TRANSITIONS[action]
     values: dict[str, Any] = {
         "status": transition.to_status,
         "assignee_membership_id": assignee_membership_id,
         **_ENTRY_TIMESTAMPS.get(transition.to_status, {}),
     }
-    if not await _compare_and_set(session, request, values):
-        await session.rollback()
+    if not await _compare_and_set(session, request, values, expected_updated_at=expected_updated_at):
         raise ConcurrentChangeError
     record_event(
         session,
@@ -289,8 +333,111 @@ async def _apply(
         to_status=transition.to_status,
         data=data,
     )
+
+
+async def _set_priority(
+    session: AsyncSession,
+    request: Request,
+    membership: Membership,
+    priority: RequestPriority,
+    *,
+    data: dict[str, Any],
+    expected_updated_at: datetime | None,
+) -> None:
+    values = {"priority": priority}
+    if not await _compare_and_set(
+        session, request, values, guard_priority=True, expected_updated_at=expected_updated_at
+    ):
+        raise ConcurrentChangeError
+    record_event(
+        session,
+        request,
+        actor_membership_id=membership.id,
+        event_type=RequestEventType.PRIORITY_CHANGED,
+        data={"from_priority": request.priority.value, "to_priority": priority.value, **data},
+    )
+
+
+async def stage(
+    session: AsyncSession,
+    organization_id: uuid.UUID,
+    request_id: uuid.UUID,
+    membership: Membership,
+    change: Change,
+    *,
+    expected_updated_at: datetime | None = None,
+    event_data: dict[str, Any] | None = None,
+) -> None:
+    """Authorize and apply one action inside the CALLER's transaction: no commit.
+
+    The per-action endpoints commit right after (see perform); an approved AI proposal
+    stages several and commits once, so they all happen or none do. With
+    `expected_updated_at`, any change since the request was reviewed → 409 (stale).
+    `event_data` is added to the history event (e.g. which approval caused it).
+    """
+    request = await _authorize(session, organization_id, request_id, membership, change.action)  # 404/403/409
+    if expected_updated_at is not None and request.updated_at != expected_updated_at:
+        raise StaleRequestError
+    extra = event_data or {}
+    common = dict(data=extra, expected_updated_at=expected_updated_at)
+    match change.action:
+        case RequestAction.ASSIGN:
+            assert change.assignee_membership_id is not None
+            if request.assignee_membership_id == change.assignee_membership_id:
+                return  # Idempotent: already assigned to this person (a retry, or a double click).
+            assignee_name = await _validate_assignee(session, request, change.assignee_membership_id)
+            data = {
+                "assignee_membership_id": str(change.assignee_membership_id),
+                "assignee_name": assignee_name,
+                "previous_assignee_membership_id": (
+                    str(request.assignee_membership_id) if request.assignee_membership_id else None
+                ),
+                **extra,
+            }
+            await _apply(
+                session, request, membership, change.action,
+                assignee_membership_id=change.assignee_membership_id,
+                data=data, expected_updated_at=expected_updated_at,
+            )
+        case RequestAction.CLAIM:
+            data = {"assignee_membership_id": str(membership.id), "claimed": True, **extra}
+            await _apply(
+                session, request, membership, change.action,
+                assignee_membership_id=membership.id, data=data, expected_updated_at=expected_updated_at,
+            )
+        case RequestAction.UNASSIGN:
+            data = {"previous_assignee_membership_id": str(request.assignee_membership_id), **extra}
+            await _apply(
+                session, request, membership, change.action,
+                assignee_membership_id=None, data=data, expected_updated_at=expected_updated_at,
+            )
+        case RequestAction.CHANGE_PRIORITY:
+            assert change.priority is not None
+            if request.priority == change.priority:
+                return  # Idempotent, like assigning the same person.
+            await _set_priority(session, request, membership, change.priority, **common)
+        case _:  # START, COMPLETE, CANCEL keep the assignee
+            await _apply(
+                session, request, membership, change.action,
+                assignee_membership_id=request.assignee_membership_id, **common,
+            )
+
+
+async def perform(
+    session: AsyncSession,
+    organization_id: uuid.UUID,
+    request_id: uuid.UUID,
+    membership: Membership,
+    change: Change,
+) -> RequestRow:
+    """One action as its own transaction: the request + its history event, both or neither."""
+    try:
+        await stage(session, organization_id, request_id, membership, change)
+    except DomainError:
+        await session.rollback()
+        raise
     await session.commit()
-    return await get_request(session, request.organization_id, request.id, viewer_for(membership))
+    return await get_request(session, organization_id, request_id, viewer_for(membership))
 
 
 async def assign(
@@ -300,85 +447,46 @@ async def assign(
     membership: Membership,
     assignee_membership_id: uuid.UUID,
 ) -> RequestRow:
-    request = await _authorize(session, organization_id, request_id, membership, RequestAction.ASSIGN)
-    if request.assignee_membership_id == assignee_membership_id:
-        # Idempotent: already assigned to this person (a retry, or a double click).
-        return await get_request(session, organization_id, request_id, viewer_for(membership))
-    assignee_name = await _validate_assignee(session, request, assignee_membership_id)
-    return await _apply(
-        session,
-        request,
-        membership,
-        RequestAction.ASSIGN,
-        assignee_membership_id=assignee_membership_id,
-        data={
-            "assignee_membership_id": str(assignee_membership_id),
-            "assignee_name": assignee_name,
-            "previous_assignee_membership_id": (
-                str(request.assignee_membership_id) if request.assignee_membership_id else None
-            ),
-        },
-    )
+    change = Change(RequestAction.ASSIGN, assignee_membership_id=assignee_membership_id)
+    return await perform(session, organization_id, request_id, membership, change)
 
 
 async def claim(
     session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    request = await _authorize(session, organization_id, request_id, membership, RequestAction.CLAIM)
-    return await _apply(
-        session,
-        request,
-        membership,
-        RequestAction.CLAIM,
-        assignee_membership_id=membership.id,
-        data={"assignee_membership_id": str(membership.id), "claimed": True},
-    )
+    return await perform(session, organization_id, request_id, membership, Change(RequestAction.CLAIM))
 
 
 async def unassign(
     session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    request = await _authorize(
-        session, organization_id, request_id, membership, RequestAction.UNASSIGN
-    )
-    return await _apply(
-        session,
-        request,
-        membership,
-        RequestAction.UNASSIGN,
-        assignee_membership_id=None,
-        data={"previous_assignee_membership_id": str(request.assignee_membership_id)},
-    )
-
-
-async def _keep_assignee(
-    session: AsyncSession,
-    organization_id: uuid.UUID,
-    request_id: uuid.UUID,
-    membership: Membership,
-    action: RequestAction,
-) -> RequestRow:
-    request = await _authorize(session, organization_id, request_id, membership, action)
-    return await _apply(
-        session, request, membership, action, assignee_membership_id=request.assignee_membership_id
-    )
+    return await perform(session, organization_id, request_id, membership, Change(RequestAction.UNASSIGN))
 
 
 async def start(
     session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    return await _keep_assignee(session, organization_id, request_id, membership, RequestAction.START)
+    return await perform(session, organization_id, request_id, membership, Change(RequestAction.START))
 
 
 async def complete(
     session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    return await _keep_assignee(
-        session, organization_id, request_id, membership, RequestAction.COMPLETE
-    )
+    return await perform(session, organization_id, request_id, membership, Change(RequestAction.COMPLETE))
 
 
 async def cancel(
     session: AsyncSession, organization_id: uuid.UUID, request_id: uuid.UUID, membership: Membership
 ) -> RequestRow:
-    return await _keep_assignee(session, organization_id, request_id, membership, RequestAction.CANCEL)
+    return await perform(session, organization_id, request_id, membership, Change(RequestAction.CANCEL))
+
+
+async def change_priority(
+    session: AsyncSession,
+    organization_id: uuid.UUID,
+    request_id: uuid.UUID,
+    membership: Membership,
+    priority: RequestPriority,
+) -> RequestRow:
+    change = Change(RequestAction.CHANGE_PRIORITY, priority=priority)
+    return await perform(session, organization_id, request_id, membership, change)

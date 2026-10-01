@@ -29,6 +29,10 @@ class AssignBody(StrictRequest):
     assignee_membership_id: uuid.UUID
 
 
+class ChangePriorityBody(StrictRequest):
+    priority: RequestPriority
+
+
 class PersonOut(BaseModel):
     membership_id: uuid.UUID
     full_name: str
