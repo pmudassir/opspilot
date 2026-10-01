@@ -14,6 +14,8 @@
 | `comments` | yes | request, author, body; immutable in V1; index `(organization_id, request_id, created_at)` |
 | `auth_sessions` | no | hashed session token, user, expiry (see authentication.md) |
 | `login_attempts` | no | email, ip, succeeded, created_at; indexes `(email, created_at)`, `(ip, created_at)` for throttling windows; 30-day retention |
+| `ai_usage` | yes | one AI call or assistant run: feature, provider, model, prompt version, outcome, latency, tokens. **No prompt or output text.** Quota index `(organization_id, membership_id, created_at)` |
+| `ai_tool_calls` | yes | one tool call inside an assistant run: step, tool, status, latency, result count. **No arguments or results.** Composite FK `(organization_id, run_id)` → `ai_usage` |
 
 Deferred: Task, Invitation, Location, Category, per-org request numbers.
 

@@ -124,3 +124,13 @@ Format: decision · why · alternatives · revisit when.
 - **Why:** model output is probabilistic and can be manipulated via prompt injection. Drafts only pre-fill an editable form; validation, tenant mapping and authorization stay deterministic in normal code.
 - **Alternatives:** auto-create requests from AI output (faster, but errors and injections become data).
 - **Revisit when:** evals show consistently high accuracy for a narrow case, and even then only with an undo path and audit trail.
+
+## ADR-025: Tool calling with a hand-written loop before any agent framework
+- **Why:** the loop is ~100 lines (`runner.py`): model call → validate → execute → append result, bounded by call, tool and time budgets. Writing it makes every safety decision visible and testable (offering vs authorization, per-call reload, read-only transactions, forced final answer), and it's the baseline a framework must beat. Tools are thin adapters over existing services, so business rules stay in normal code.
+- **Alternatives:** LangGraph / an agent SDK (checkpointing, interrupts and retries for free, but hides the loop before we understand it); MCP (standard tool protocol, useful when tools are shared across clients, which they aren't yet).
+- **Revisit when:** workflows need to pause and resume (approvals, Phase 6/7), span requests, or branch in ways that make the loop hard to follow.
+
+## ADR-026: The model sees per-run refs (R1, R2…), never database ids
+- **Why:** keeps the ADR-024 rule "no ids to the model". A ref exists only for a request a tool already showed this user in this run, and every use re-queries with the organization and the user's visibility, so a hallucinated, guessed or leaked ref can't reach anything the user couldn't. Refs are also ~30 tokens shorter than UUIDs and can't be mistyped.
+- **Alternatives:** raw UUIDs, re-validated on use (works, but ids enter model context and logs); per-org request numbers like `#142` (friendly for people too, but needs a per-org counter and a migration; good later).
+- **Revisit when:** conversations span runs (refs would need storing) or requests get human-facing numbers.
