@@ -25,3 +25,4 @@ node_modules/
 
 # eval run outputs
 backend/evals/request_drafts/results/
+backend/evals/assistant_tools/results/
