@@ -121,7 +121,8 @@ class ToolExecutor:
             result_count=count,
         )
         logger.info(
-            "assistant tool call run=%s tool=%s status=%s latency_ms=%d",
+            # %r: the tool name comes from the model; a newline in it must not forge a log line.
+            "assistant tool call run=%s tool=%r status=%s latency_ms=%d",
             self._run_id, record.tool, record.status, record.latency_ms,
         )
         return ToolOutcome(content, record)
@@ -166,10 +167,10 @@ class ToolExecutor:
         except DBAPIError as exc:
             if _is_statement_timeout(exc):
                 return await self._failed(ToolCallStatus.TIMEOUT, "The lookup took too long; try a narrower search.")
-            logger.exception("assistant tool failed run=%s tool=%s", self._run_id, tool.name)
+            logger.exception("assistant tool failed run=%s tool=%r", self._run_id, tool.name)
             return await self._failed(ToolCallStatus.INTERNAL, "The lookup failed.")
         except Exception:
-            logger.exception("assistant tool failed run=%s tool=%s", self._run_id, tool.name)
+            logger.exception("assistant tool failed run=%s tool=%r", self._run_id, tool.name)
             return await self._failed(ToolCallStatus.INTERNAL, "The lookup failed.")
 
         self._results[key] = result.data
