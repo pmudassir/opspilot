@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.ai.assistant.router import router as assistant_router
+from app.ai.proposals.router import router as proposals_router
 from app.ai.router import router as ai_router
 from app.auth.router import router as auth_router
 from app.comments.router import router as comments_router
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics_router)
     app.include_router(ai_router)
     app.include_router(assistant_router)
+    app.include_router(proposals_router)
     return app
 
 

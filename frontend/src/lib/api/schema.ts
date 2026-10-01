@@ -106,6 +106,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/ai/proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Proposal */
+        get: operations["get_proposal_api_v1_orgs__org_id__ai_proposals__proposal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/proposals/{proposal_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Proposal
+         * @description Executes the exact previewed change, all or nothing. Approving again returns the
+         *     recorded outcome (executed or failed) without executing twice.
+         */
+        post: operations["approve_proposal_api_v1_orgs__org_id__ai_proposals__proposal_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Proposal */
+        post: operations["reject_proposal_api_v1_orgs__org_id__ai_proposals__proposal_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/ai/request-drafts": {
         parameters: {
             query?: never;
@@ -451,6 +506,11 @@ export interface components {
             password: string;
             role: components["schemas"]["MembershipRole"];
         };
+        /** ApproveBody */
+        ApproveBody: {
+            /** Payload Hash */
+            payload_hash: string;
+        };
         /** AskBody */
         AskBody: {
             /** Question */
@@ -725,6 +785,70 @@ export interface components {
              */
             membership_id: string;
         };
+        /**
+         * ProposalAction
+         * @enum {string}
+         */
+        ProposalAction: "assign" | "unassign" | "cancel" | "change_priority" | "comment";
+        /**
+         * ProposalItemOut
+         * @description A request as it was when the proposal was made (the preview).
+         */
+        ProposalItemOut: {
+            /** Assignee Name */
+            assignee_name: string | null;
+            priority: components["schemas"]["RequestPriority"];
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            status: components["schemas"]["RequestStatus"];
+            /** Title */
+            title: string;
+        };
+        /** ProposalOut */
+        ProposalOut: {
+            action: components["schemas"]["ProposalAction"];
+            /** Comment Body */
+            comment_body: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Failure Code */
+            failure_code: string | null;
+            /** Failure Detail */
+            failure_detail: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items: components["schemas"]["ProposalItemOut"][];
+            /** New Assignee Name */
+            new_assignee_name: string | null;
+            new_priority: components["schemas"]["RequestPriority"] | null;
+            /** Payload Hash */
+            payload_hash: string;
+            status: components["schemas"]["ProposalStatus"];
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * ProposalStatus
+         * @enum {string}
+         */
+        ProposalStatus: "pending" | "executed" | "failed" | "rejected" | "expired";
         /** ReferenceOut */
         ReferenceOut: {
             /** Ref */
@@ -1093,6 +1217,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssistantAnswerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_proposal_api_v1_orgs__org_id__ai_proposals__proposal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+                org_id: string;
+            };
+            cookie?: {
+                opspilot_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_proposal_api_v1_orgs__org_id__ai_proposals__proposal_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+                org_id: string;
+            };
+            cookie?: {
+                opspilot_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_proposal_api_v1_orgs__org_id__ai_proposals__proposal_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+                org_id: string;
+            };
+            cookie?: {
+                opspilot_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
                 };
             };
             /** @description Validation Error */

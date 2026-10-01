@@ -25,6 +25,23 @@ async def add_comment(
     body: str,
 ) -> CommentRow:
     """Anyone who can see the request can comment on it (404 otherwise)."""
+    comment = await stage_comment(session, organization_id, request_id, author=author, viewer=viewer, body=body)
+    await session.commit()
+    author_name = await session.scalar(select(User.full_name).where(User.id == author.user_id))
+    assert author_name is not None
+    return CommentRow(comment, author_name)
+
+
+async def stage_comment(
+    session: AsyncSession,
+    organization_id: uuid.UUID,
+    request_id: uuid.UUID,
+    *,
+    author: Membership,
+    viewer: Viewer,
+    body: str,
+) -> Comment:
+    """Add a comment inside the CALLER's transaction (no commit): 404 unless visible."""
     await get_request(session, organization_id, request_id, viewer)
     comment = Comment(
         organization_id=organization_id,
@@ -33,10 +50,8 @@ async def add_comment(
         body=body,
     )
     session.add(comment)
-    await session.commit()
-    author_name = await session.scalar(select(User.full_name).where(User.id == author.user_id))
-    assert author_name is not None
-    return CommentRow(comment, author_name)
+    await session.flush()
+    return comment
 
 
 async def list_comments(

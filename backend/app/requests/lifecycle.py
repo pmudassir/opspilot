@@ -358,6 +358,15 @@ async def _set_priority(
     )
 
 
+async def validate(session: AsyncSession, request: Request, actor: Actor, change: Change) -> None:
+    """Would this change be allowed right now? Raises the reason if not; writes nothing.
+    Used to preview proposals: stage() re-checks everything when it actually runs."""
+    check(change.action, request, actor)
+    if change.action == RequestAction.ASSIGN:
+        assert change.assignee_membership_id is not None
+        await _validate_assignee(session, request, change.assignee_membership_id)
+
+
 async def stage(
     session: AsyncSession,
     organization_id: uuid.UUID,

@@ -16,10 +16,14 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.proposals.models import ProposalAction
+from app.ai.proposals.service import create_proposal, draft_proposal
+from app.organizations.models import Membership
+from app.users.models import User
 from tests.helpers import (
     add_member_id,
     create_department_id,
@@ -31,7 +35,7 @@ from tests.helpers import (
 )
 
 ORG_ROUTE_PREFIX = "/api/v1/orgs/{org_id}"
-OBJECT_ID_PLACEHOLDERS = ("department_id", "membership_id", "request_id")
+OBJECT_ID_PLACEHOLDERS = ("department_id", "membership_id", "request_id", "proposal_id")
 
 
 @dataclass(frozen=True)
@@ -79,6 +83,9 @@ ORG_ROUTES = [
     RouteCase("GET", "/metrics"),
     RouteCase("POST", "/ai/request-drafts", {"text": "The Wi-Fi keeps dropping in room 2"}),
     RouteCase("POST", "/ai/assistant", {"question": "Which requests are open?"}),
+    RouteCase("GET", "/ai/proposals/{proposal_id}"),
+    RouteCase("POST", "/ai/proposals/{proposal_id}/approve", {"payload_hash": "0" * 64}),
+    RouteCase("POST", "/ai/proposals/{proposal_id}/reject"),
 ]
 
 
@@ -95,10 +102,11 @@ class World:
     it_department_a: str
     it_department_b: str
     request_a: str  # created by Carol in A's IT department
+    proposal_a: str  # Alice's pending AI proposal to cancel request_a
 
 
 @pytest.fixture
-async def world(make_client: Callable[[], AsyncClient]) -> World:
+async def world(make_client: Callable[[], AsyncClient], db_session: AsyncSession) -> World:
     alice, bob = make_client(), make_client()
     org_a = await signup_org(alice, email="alice@a.example", organization_name="Hotel A")
     org_b = await signup_org(bob, email="bob@b.example", organization_name="Hotel B")
@@ -109,7 +117,18 @@ async def world(make_client: Callable[[], AsyncClient]) -> World:
     assert (await alice.put(org_url(org_a, f"/departments/{it_a}/members/{carol}"))).status_code == 204
     carol_client = await logged_in(make_client(), "carol@a.example")
     request_a = await create_request_id(carol_client, org_a, it_a, title="Projector broken")
-    return World(alice, bob, org_a, org_b, carol, dave, it_a, it_b, request_a)
+    alice_membership = await db_session.scalar(
+        select(Membership).join(User, User.id == Membership.user_id).where(User.email == "alice@a.example")
+    )
+    assert alice_membership is not None
+    draft = await draft_proposal(
+        db_session, uuid.UUID(org_a), alice_membership, ProposalAction.CANCEL, [uuid.UUID(request_a)]
+    )
+    proposal = create_proposal(
+        db_session, organization_id=uuid.UUID(org_a), proposer_membership_id=alice_membership.id, run_id=None, draft=draft
+    )
+    await db_session.commit()
+    return World(alice, bob, org_a, org_b, carol, dave, it_a, it_b, request_a, str(proposal.id))
 
 
 async def send(
@@ -120,12 +139,14 @@ async def send(
     department_id: str,
     membership_id: str,
     request_id: str,
+    proposal_id: str,
 ) -> int:
     ids = {
         "org_id": org_id,
         "department_id": department_id,
         "membership_id": membership_id,
         "request_id": request_id,
+        "proposal_id": proposal_id,
     }
     url = (ORG_ROUTE_PREFIX + route.path).format(**ids)
     body = (
@@ -158,6 +179,7 @@ async def test_foreign_org_id_in_url_is_not_found(world: World, route: RouteCase
         department_id=world.it_department_a,
         membership_id=world.carol_membership_a,
         request_id=world.request_a,
+        proposal_id=world.proposal_a,
     )
 
     assert status == 404
@@ -176,6 +198,7 @@ async def test_foreign_object_ids_under_own_org_are_not_found(
         department_id=world.it_department_a,
         membership_id=world.carol_membership_a,
         request_id=world.request_a,
+        proposal_id=world.proposal_a,
     )
 
     assert status == 404
@@ -227,6 +250,7 @@ async def test_unauthenticated_requests_are_rejected(
         department_id=world.it_department_a,
         membership_id=world.carol_membership_a,
         request_id=world.request_a,
+        proposal_id=world.proposal_a,
     )
 
     assert status == 401
@@ -242,6 +266,7 @@ async def test_attacks_leave_victim_organization_unchanged(world: World) -> None
                 department_id=world.it_department_a,
                 membership_id=world.carol_membership_a,
                 request_id=world.request_a,
+                proposal_id=world.proposal_a,
             )
 
     members = (await world.alice.get(org_url(world.org_a, "/members"))).json()
@@ -253,6 +278,8 @@ async def test_attacks_leave_victim_organization_unchanged(world: World) -> None
         ("alice@a.example", "admin", "active"),
         ("carol@a.example", "agent", "active"),
     ]
+    proposal = (await world.alice.get(org_url(world.org_a, f"/ai/proposals/{world.proposal_a}"))).json()
+    assert proposal["status"] == "pending"
     requests = (await world.alice.get(org_url(world.org_a, "/requests"))).json()["items"]
     comments = (
         await world.alice.get(org_url(world.org_a, f"/requests/{world.request_a}/comments"))
