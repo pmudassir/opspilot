@@ -29,6 +29,7 @@ describe("describeToolUse", () => {
   it("describes successful and failed lookups", () => {
     expect(describeToolUse({ tool: "search_requests", status: "ok" })).toBe("searched requests");
     expect(describeToolUse({ tool: "get_request", status: "repeated" })).toBe("opened a request");
+    expect(describeToolUse({ tool: "propose_cancel", status: "forbidden" })).toBe("proposed cancelling (forbidden)");
     expect(describeToolUse({ tool: "get_request", status: "not_found" })).toBe("opened a request (not found)");
     expect(describeToolUse({ tool: "drop_tables", status: "unknown_tool" })).toBe("used an unknown tool (unknown tool)");
   });

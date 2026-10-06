@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useState } from "react";
 
+import { ProposalCard } from "@/components/assistant/proposal-card";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, PageLoading } from "@/components/ui/feedback";
 import {
@@ -60,7 +61,8 @@ function AskView() {
       <div>
         <h1 className="text-lg font-semibold">Ask OpsPilot</h1>
         <p className="text-sm text-zinc-600">
-          Answers come from requests you&apos;re allowed to see. It can look things up but can&apos;t change anything.
+          Answers come from requests you&apos;re allowed to see. It can propose changes, but nothing changes until you
+          approve.
         </p>
       </div>
 
@@ -184,9 +186,10 @@ function Answer({ orgId, question, answer }: { orgId: string; question: string; 
           ))}
         </ul>
       )}
+      {answer.proposal && <ProposalCard key={answer.proposal.id} orgId={orgId} initial={answer.proposal} />}
       <p className="border-t border-zinc-100 pt-3 text-xs text-zinc-500">
-        {lookups.length > 0 ? `Looked up: ${lookups.join(", ")}.` : "Answered without looking anything up."} Read-only
-        · AI can be wrong, so check the request before acting · {answer.model} · as of {formatDateTime(answer.as_of)}
+        {lookups.length > 0 ? `Looked up: ${lookups.join(", ")}.` : "Answered without looking anything up."} AI can be
+        wrong, so check before acting · {answer.model} · as of {formatDateTime(answer.as_of)}
       </p>
     </article>
   );

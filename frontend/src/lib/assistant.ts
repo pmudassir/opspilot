@@ -11,7 +11,7 @@ export const QUESTION_MAX = 500;
 
 export type AskInput = { question: string; requestId?: string };
 
-/** Ask a question. Read-only: nothing is changed, and nothing is stored but usage metadata. */
+/** Ask a question. Nothing is changed: at most a proposal is stored, which only the user can approve. */
 export function useAsk(orgId: string) {
   return useMutation({
     mutationFn: ({ question, requestId }: AskInput) =>
@@ -52,6 +52,11 @@ const TOOL_LABELS: Record<string, string> = {
   list_departments: "listed departments",
   get_department_status: "checked department metrics",
   list_department_staff: "checked department staff",
+  propose_assign: "proposed an assignment",
+  propose_unassign: "proposed unassigning",
+  propose_cancel: "proposed cancelling",
+  propose_priority: "proposed a priority change",
+  propose_comment: "proposed a comment",
 };
 
 /** "searched requests", or "searched requests (not found)" when the lookup failed. */

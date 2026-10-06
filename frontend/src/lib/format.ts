@@ -21,3 +21,10 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 export function formatDateTime(iso: string): string {
   return dateTime.format(new Date(iso));
 }
+
+const time = new Intl.DateTimeFormat("en", { timeStyle: "short" });
+
+/** "2:41 PM": for things that happen today, like a proposal's expiry. */
+export function formatTime(iso: string): string {
+  return time.format(new Date(iso));
+}
