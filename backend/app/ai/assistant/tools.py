@@ -18,12 +18,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.assistant.refs import RefRegistry
+from app.ai.proposals.service import ProposalDraft
 from app.comments.service import list_comments
 from app.departments.models import DEPARTMENT_NAME_MAX_LENGTH
 from app.departments.service import list_department_staff, list_departments
 from app.errors import NotFoundError
 from app.metrics.service import DepartmentMetrics, organization_metrics
-from app.organizations.models import Membership, MembershipRole
+from app.organizations.models import Membership
 from app.permissions import Permission, has_permission
 from app.requests.lifecycle import allowed_actions, load_actor
 from app.requests.models import RequestPriority, RequestStatus
@@ -76,9 +77,10 @@ class ToolEnv:
 class ToolResult:
     data: dict[str, Any]
     count: int | None = None  # rows returned, for the audit log
+    proposal: ProposalDraft | None = None  # set by propose_* tools: a draft, not a change
 
 
-class _Args(BaseModel):
+class ToolArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
@@ -92,7 +94,9 @@ Ref = Annotated[
 ACTIVE_STATUSES = [RequestStatus.OPEN, RequestStatus.ASSIGNED, RequestStatus.IN_PROGRESS]
 
 
-class SearchRequestsArgs(_Args):
+class SearchFilters(ToolArgs):
+    """Which requests: shared by search_requests and the propose_* tools."""
+
     status: list[RequestStatus] | None = Field(
         None, max_length=len(RequestStatus), description="Omit for active requests (open, assigned, in progress)"
     )
@@ -105,22 +109,25 @@ class SearchRequestsArgs(_Args):
     requested_by_me: bool = False
     title_contains: str | None = Field(None, min_length=1, max_length=100)
     created_within_days: int | None = Field(None, ge=1, le=90)
+
+
+class SearchRequestsArgs(SearchFilters):
     limit: int = Field(10, ge=1, le=20)
 
 
-class RequestRefArgs(_Args):
+class RequestRefArgs(ToolArgs):
     ref: Ref
 
 
-class NoArgs(_Args):
+class NoArgs(ToolArgs):
     pass
 
 
-class DepartmentArgs(_Args):
+class DepartmentArgs(ToolArgs):
     department: DepartmentName
 
 
-class DepartmentStatusArgs(_Args):
+class DepartmentStatusArgs(ToolArgs):
     department: DepartmentName | None = Field(None, description="Omit to compare every department")
     period_days: int = Field(7, ge=1, le=90)
 
@@ -160,7 +167,7 @@ async def _department_id(env: ToolEnv, name: str) -> uuid.UUID:
     return match.id
 
 
-async def _person_membership_id(env: ToolEnv, name: str) -> uuid.UUID:
+async def person_membership_id(env: ToolEnv, name: str) -> uuid.UUID:
     # Looking people up by name reveals who is in the organization: same rule as the members list.
     if not has_permission(env.membership.role, Permission.MEMBERS_READ):
         raise ToolError(ToolErrorCode.FORBIDDEN, 'Your role can\'t look up other people; use "me" or "unassigned".')
@@ -195,7 +202,8 @@ async def _load(env: ToolEnv, ref: str) -> RequestRow:
 # --- tools --------------------------------------------------------------------
 
 
-async def search_requests(env: ToolEnv, args: SearchRequestsArgs) -> ToolResult:
+async def resolve_filters(env: ToolEnv, args: SearchFilters) -> RequestFilters:
+    """Names → this organization's ids; "me" → the caller. Same rules for every tool."""
     if args.unassigned and args.assignee and args.assignee.casefold() != "unassigned":
         raise ToolError(ToolErrorCode.INVALID_ARGUMENTS, "Use either assignee or unassigned, not both.")
     assignee_id: uuid.UUID | None = None
@@ -207,8 +215,8 @@ async def search_requests(env: ToolEnv, args: SearchRequestsArgs) -> ToolResult:
             case "unassigned":  # tolerated: models sometimes put it here instead of the flag
                 unassigned = True
             case _:
-                assignee_id = await _person_membership_id(env, args.assignee)
-    filters = RequestFilters(
+                assignee_id = await person_membership_id(env, args.assignee)
+    return RequestFilters(
         # "Which requests are unassigned?" means active ones: closed requests only when asked for.
         statuses=args.status or ACTIVE_STATUSES,
         department_id=await _department_id(env, args.department) if args.department else None,
@@ -219,6 +227,10 @@ async def search_requests(env: ToolEnv, args: SearchRequestsArgs) -> ToolResult:
         title_contains=args.title_contains,
         created_within=timedelta(days=args.created_within_days) if args.created_within_days else None,
     )
+
+
+async def search_requests(env: ToolEnv, args: SearchRequestsArgs) -> ToolResult:
+    filters = await resolve_filters(env, args)
     viewer = viewer_for(env.membership)
     rows, _ = await list_requests(env.session, env.organization_id, viewer, filters, limit=args.limit, after=None)
     # The total tells the model (and so the user) when it is only seeing some of the matches.
@@ -325,12 +337,13 @@ async def list_staff(env: ToolEnv, args: DepartmentArgs) -> ToolResult:
 class Tool:
     name: str
     description: str
-    args_model: type[_Args]
+    args_model: type[ToolArgs]
     permission: Permission  # checked when offering AND again when executing
     run: Callable[[ToolEnv, Any], Awaitable[ToolResult]]
+    proposes: bool = False  # returns a proposal draft (at most one per run)
 
 
-TOOLS: dict[str, Tool] = {
+READ_TOOLS: dict[str, Tool] = {
     tool.name: tool
     for tool in (
         Tool(
@@ -379,38 +392,3 @@ TOOLS: dict[str, Tool] = {
         ),
     )
 }
-
-
-def tools_for(role: MembershipRole) -> list[Tool]:
-    """Only offer what the role may use: the model can't ask for what it never saw.
-    (The executor still re-checks: offering is not authorization.)"""
-    return [tool for tool in TOOLS.values() if has_permission(role, tool.permission)]
-
-
-def _compact_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Pydantic's JSON schema, with $refs inlined and titles dropped: fewer tokens per call."""
-    definitions = schema.pop("$defs", {})
-
-    def walk(node: Any) -> Any:
-        if isinstance(node, dict):
-            if "$ref" in node:
-                target = definitions[node["$ref"].rsplit("/", 1)[-1]]
-                return walk({**target, **{k: v for k, v in node.items() if k != "$ref"}})
-            return {k: walk(v) for k, v in node.items() if not (k == "title" and isinstance(v, str))}
-        if isinstance(node, list):
-            return [walk(item) for item in node]
-        return node
-
-    return walk(schema)
-
-
-def tool_definition(tool: Tool) -> dict[str, Any]:
-    """OpenAI-compatible function definition (the format Groq accepts)."""
-    return {
-        "type": "function",
-        "function": {
-            "name": tool.name,
-            "description": tool.description,
-            "parameters": _compact_schema(tool.args_model.model_json_schema()),
-        },
-    }

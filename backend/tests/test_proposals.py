@@ -75,7 +75,7 @@ async def propose(
     draft = await draft_proposal(
         db, uuid.UUID(org.org_id), proposer, action, [uuid.UUID(r) for r in request_ids or org.requests], **params
     )
-    proposal = service.create_proposal(
+    proposal = await service.create_proposal(
         db, organization_id=uuid.UUID(org.org_id), proposer_membership_id=proposer.id, run_id=None, draft=draft
     )
     await db.commit()

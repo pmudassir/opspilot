@@ -94,7 +94,7 @@
         "type": "object"
       },
       "AssistantAnswerOut": {
-        "description": "Read-only: nothing was changed. `references` link the refs (R1, ...) in `answer`.",
+        "description": "Nothing was changed. `references` link the refs (R1, ...) in `answer`; a `proposal`\nonly takes effect if the user approves it (POST /ai/proposals/{id}/approve).",
         "properties": {
           "answer": {
             "title": "Answer",
@@ -108,6 +108,16 @@
           "model": {
             "title": "Model",
             "type": "string"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "references": {
             "items": {
@@ -129,7 +139,8 @@
           "references",
           "tools_used",
           "model",
-          "as_of"
+          "as_of",
+          "proposal"
         ],
         "title": "AssistantAnswerOut",
         "type": "object"

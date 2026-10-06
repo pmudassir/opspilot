@@ -13,20 +13,19 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.assistant import tools
+from app.ai.assistant import registry, tools
 from app.ai.assistant.executor import (
     MembershipRevokedError,
     ToolCallStatus,
     ToolExecutor,
 )
 from app.ai.assistant.refs import RefRegistry
+from app.ai.assistant.registry import tool_definition, tools_for
 from app.ai.assistant.tools import (
     NoArgs,
     Tool,
     ToolEnv,
     ToolResult,
-    tool_definition,
-    tools_for,
 )
 from app.organizations.models import MembershipRole
 from app.permissions import Permission
@@ -341,13 +340,15 @@ async def test_department_staff_with_workload(db_session: AsyncSession, org: Org
 
 def test_tools_offered_follow_permissions() -> None:
     names = {role: {tool.name for tool in tools_for(role)} for role in MembershipRole}
-    assert names[MembershipRole.MEMBER] == {"search_requests", "get_request", "get_request_history", "list_departments"}
+    reads = {"search_requests", "get_request", "get_request_history", "list_departments"}
+    # Members may cancel their own open requests and comment: they can propose those.
+    assert names[MembershipRole.MEMBER] == reads | {"propose_cancel", "propose_comment"}
     assert names[MembershipRole.AGENT] == names[MembershipRole.MEMBER] | {"list_department_staff"}
-    assert names[MembershipRole.MANAGER] == set(tools.TOOLS)
+    assert names[MembershipRole.MANAGER] == set(registry.TOOLS)
 
 
 def test_tool_definitions_are_compact_and_name_no_tenant_or_ids() -> None:
-    for tool in tools.TOOLS.values():
+    for tool in registry.TOOLS.values():
         definition = json.dumps(tool_definition(tool))
         assert "$ref" not in definition and '"title"' not in definition
         parameters = tool_definition(tool)["function"]["parameters"]
@@ -401,7 +402,7 @@ async def test_role_downgrade_applies_to_the_next_call(db_session: AsyncSession,
 
 
 def _extra_tool(monkeypatch: pytest.MonkeyPatch, name: str, run: Any) -> None:
-    monkeypatch.setitem(tools.TOOLS, name, Tool(name, "test only", NoArgs, Permission.REQUESTS_READ, run))
+    monkeypatch.setitem(registry.TOOLS, name, Tool(name, "test only", NoArgs, Permission.REQUESTS_READ, run))
 
 
 async def test_tools_run_in_a_read_only_transaction(

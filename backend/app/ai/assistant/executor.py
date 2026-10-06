@@ -29,8 +29,10 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.assistant.refs import RefRegistry
-from app.ai.assistant.tools import TOOLS, ToolEnv, ToolError, ToolErrorCode
+from app.ai.assistant.registry import TOOLS
+from app.ai.assistant.tools import ToolEnv, ToolError, ToolErrorCode
 from app.ai.models import ToolCallStatus
+from app.ai.proposals.service import ProposalDraft
 from app.errors import NotFoundError
 from app.organizations.models import Membership, MembershipStatus
 from app.permissions import Permission, has_permission
@@ -110,6 +112,13 @@ class ToolExecutor:
         self._run_id = run_id
         self._timeout_seconds = timeout_seconds
         self._results: dict[str, dict[str, Any]] = {}
+        self._proposal: tuple[uuid.UUID, ProposalDraft] | None = None
+
+    @property
+    def proposal(self) -> tuple[uuid.UUID, ProposalDraft] | None:
+        """The run's proposal draft (id, draft), if a propose_* tool made one. The
+        executor never stores it: the service does, together with the run record."""
+        return self._proposal
 
     async def execute(self, name: str, arguments: str) -> ToolOutcome:
         started = time.perf_counter()
@@ -154,6 +163,10 @@ class ToolExecutor:
         key = f"{tool.name}:{args.model_dump_json()}"
         if key in self._results:
             return ToolCallStatus.REPEATED, _dumps({"ok": True, "repeated": True, "data": self._results[key]}), None
+        if tool.proposes and self._proposal is not None:
+            return self._error(
+                ToolCallStatus.FORBIDDEN, "Only one proposal per question: the user must approve or reject P1 first."
+            )
 
         try:
             async with asyncio.timeout(self._timeout_seconds + ASYNCIO_TIMEOUT_MARGIN_SECONDS):
@@ -174,6 +187,8 @@ class ToolExecutor:
             return await self._failed(ToolCallStatus.INTERNAL, "The lookup failed.")
 
         self._results[key] = result.data
+        if result.proposal is not None:
+            self._proposal = (uuid.uuid4(), result.proposal)
         return ToolCallStatus.OK, _dumps({"ok": True, "data": result.data}), result.count
 
     async def _in_read_only_transaction(self, permission: Permission, work: Callable[[ToolEnv], Awaitable[T]]) -> T:

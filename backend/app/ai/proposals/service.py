@@ -201,7 +201,7 @@ def payload_hash(organization_id: uuid.UUID, proposer_membership_id: uuid.UUID, 
     return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def create_proposal(
+async def create_proposal(
     session: AsyncSession,
     *,
     organization_id: uuid.UUID,
@@ -224,6 +224,8 @@ def create_proposal(
         expires_at=func.now() + PROPOSAL_TTL,  # database clock
     )
     session.add(proposal)
+    # Items reference the proposal by a composite FK the unit of work doesn't order by.
+    await session.flush()
     session.add_all(
         AIProposalItem(
             proposal_id=proposal.id,

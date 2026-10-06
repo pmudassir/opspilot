@@ -19,10 +19,11 @@ from app.ai.assistant.executor import ToolCallRecord, ToolExecutor
 from app.ai.assistant.model import SystemMessage, ToolCallingModel, UserMessage
 from app.ai.assistant.prompts import ASSISTANT_PROMPT_VERSION, system_prompt
 from app.ai.assistant.refs import RefRegistry
+from app.ai.assistant.registry import tool_definition, tools_for
 from app.ai.assistant.runner import RunFailedError, run
-from app.ai.assistant.tools import tool_definition, tools_for
 from app.ai.drafter import DraftFailure, TokenUsage
 from app.ai.models import AIToolCall, AIUsage, AIUsageOutcome
+from app.ai.proposals.service import ProposalDraft, create_proposal
 from app.ai.service import quota_retry_after
 from app.departments.models import Department, DepartmentMember
 from app.errors import DomainError
@@ -103,6 +104,7 @@ class AssistantAnswer:
     tools_used: list[ToolCallRecord]
     model: str
     as_of: datetime
+    proposal_id: uuid.UUID | None = None  # a pending proposal waiting for this user's approval
 
 
 async def _department_names(session: AsyncSession, caller: _Caller) -> list[str]:
@@ -132,6 +134,7 @@ async def _record(
     started: float,
     usage: TokenUsage,
     tool_calls: tuple[ToolCallRecord, ...],
+    proposal: tuple[uuid.UUID, ProposalDraft] | None = None,
 ) -> None:
     """The run and its tool calls, together (one transaction). No question, answer,
     arguments or results: only what's needed for cost, latency, quota and debugging."""
@@ -166,6 +169,16 @@ async def _record(
         )
         for step, record in enumerate(tool_calls, start=1)
     )
+    if proposal is not None:
+        proposal_id, draft = proposal
+        await create_proposal(
+            session,
+            organization_id=caller.organization_id,
+            proposer_membership_id=caller.membership_id,
+            run_id=run_id,
+            draft=draft,
+            proposal_id=proposal_id,
+        )
     await session.commit()
 
 
@@ -235,9 +248,14 @@ async def ask(
     except RunFailedError as exc:
         await _record(session, **record, outcome=AIUsageOutcome(exc.failure.value), usage=exc.usage, tool_calls=exc.tool_calls)
         raise AssistantFailedError(exc.failure, exc.retry_after_seconds) from exc
-    await _record(session, **record, outcome=AIUsageOutcome.SUCCESS, usage=result.usage, tool_calls=result.tool_calls)
+    # A proposal is only stored when the user gets the answer that shows it.
+    await _record(
+        session, **record, outcome=AIUsageOutcome.SUCCESS, usage=result.usage, tool_calls=result.tool_calls,
+        proposal=executor.proposal,
+    )
 
     references = await _references(session, caller, refs, result.answer)
     as_of = await session.scalar(select(func.now()))
     assert as_of is not None
-    return AssistantAnswer(result.answer, references, list(result.tool_calls), model.model, as_of)
+    proposal_id = executor.proposal[0] if executor.proposal else None
+    return AssistantAnswer(result.answer, references, list(result.tool_calls), model.model, as_of, proposal_id)

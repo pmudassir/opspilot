@@ -528,7 +528,8 @@ export interface components {
         };
         /**
          * AssistantAnswerOut
-         * @description Read-only: nothing was changed. `references` link the refs (R1, ...) in `answer`.
+         * @description Nothing was changed. `references` link the refs (R1, ...) in `answer`; a `proposal`
+         *     only takes effect if the user approves it (POST /ai/proposals/{id}/approve).
          */
         AssistantAnswerOut: {
             /** Answer */
@@ -540,6 +541,7 @@ export interface components {
             as_of: string;
             /** Model */
             model: string;
+            proposal: components["schemas"]["ProposalOut"] | null;
             /** References */
             references: components["schemas"]["ReferenceOut"][];
             /** Tools Used */

@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from app.ai.assistant import service
 from app.ai.dependencies import AssistantModelDep
 from app.ai.models import ToolCallStatus
+from app.ai.proposals.schemas import ProposalOut, proposal_out
+from app.ai.proposals.service import get_proposal
 from app.config import SettingsDep
 from app.db import SessionDep
 from app.errors import UnprocessableError
@@ -38,13 +40,16 @@ class ToolUseOut(BaseModel):
 
 
 class AssistantAnswerOut(BaseModel):
-    """Read-only: nothing was changed. `references` link the refs (R1, ...) in `answer`."""
+    """Nothing was changed. `references` link the refs (R1, ...) in `answer`; a `proposal`
+    only takes effect if the user approves it (POST /ai/proposals/{id}/approve)."""
 
     answer: str
     references: list[ReferenceOut]
     tools_used: list[ToolUseOut]
     model: str
     as_of: datetime
+    # A change the assistant proposed: nothing happens until the user approves it.
+    proposal: ProposalOut | None
 
 
 @router.post("/assistant")
@@ -57,6 +62,7 @@ async def ask(
 ) -> AssistantAnswerOut:
     if len(body.question) < QUESTION_MIN:
         raise UnprocessableError(f"Ask a question of at least {QUESTION_MIN} characters.")
+    membership_id = context.membership.id
     result = await service.ask(
         session,
         context,
@@ -71,4 +77,11 @@ async def ask(
         tools_used=[ToolUseOut(tool=t.tool, status=t.status) for t in result.tools_used],
         model=result.model,
         as_of=result.as_of,
+        proposal=(
+            await proposal_out(
+                session, await get_proposal(session, context.organization_id, membership_id, result.proposal_id)
+            )
+            if result.proposal_id
+            else None
+        ),
     )

@@ -5,7 +5,7 @@ import json
 import pytest
 
 from app.ai.assistant.model import ModelTurn, ToolCall
-from app.ai.assistant.tools import TOOLS
+from app.ai.assistant.registry import TOOLS
 from app.ai.drafter import DraftFailure, TokenUsage
 from evals.assistant_tools.grading import (
     PERSONAS,

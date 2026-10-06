@@ -24,7 +24,7 @@ from app.ai.assistant.model import (
     UserMessage,
 )
 from app.ai.assistant.prompts import system_prompt
-from app.ai.assistant.tools import TOOLS, tools_for
+from app.ai.assistant.registry import TOOLS, tools_for
 from app.ai.drafter import DraftFailure
 from app.organizations.models import MembershipRole
 

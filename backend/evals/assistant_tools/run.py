@@ -17,7 +17,7 @@ from pathlib import Path
 
 from app.ai.assistant.groq_model import GroqAssistantModel
 from app.ai.assistant.prompts import ASSISTANT_PROMPT_VERSION
-from app.ai.assistant.tools import tool_definition, tools_for
+from app.ai.assistant.registry import tool_definition, tools_for
 from app.ai.drafter import DrafterError, DraftFailure
 from app.config import get_settings
 from evals.assistant_tools.grading import (

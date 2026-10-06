@@ -124,7 +124,7 @@ async def world(make_client: Callable[[], AsyncClient], db_session: AsyncSession
     draft = await draft_proposal(
         db_session, uuid.UUID(org_a), alice_membership, ProposalAction.CANCEL, [uuid.UUID(request_a)]
     )
-    proposal = create_proposal(
+    proposal = await create_proposal(
         db_session, organization_id=uuid.UUID(org_a), proposer_membership_id=alice_membership.id, run_id=None, draft=draft
     )
     await db_session.commit()

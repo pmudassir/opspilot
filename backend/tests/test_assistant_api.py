@@ -14,12 +14,13 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.assistant import runner
+from app.ai.assistant import proposal_tools, runner
 from app.ai.assistant.model import Message, ModelTurn, ToolCall, ToolChoice, ToolMessage
 from app.ai.assistant.prompts import ASSISTANT_PROMPT_VERSION
 from app.ai.dependencies import get_assistant_model
 from app.ai.drafter import DrafterError, DraftFailure, TokenUsage
 from app.ai.models import AIToolCall, AIUsage
+from app.ai.proposals.models import AIProposal
 from app.config import get_settings
 from tests.helpers import (
     add_member_id,
@@ -137,7 +138,9 @@ async def test_the_model_never_sees_ids_and_only_gets_the_roles_tools(org: Org, 
     model.steps = [tool("search_requests"), answer("Done.")]
     assert (await ask(org.clients["mia"], org.org_id, request_id=org.printer)).status_code == 200
     first = model.calls[0]
-    assert first["tools"] == ["search_requests", "get_request", "get_request_history", "list_departments"]
+    assert first["tools"] == [
+        "search_requests", "get_request", "get_request_history", "list_departments", "propose_cancel", "propose_comment"
+    ]
     for call in model.calls:
         for message in call["messages"]:
             assert not UUID_PATTERN.search(repr(message)), message
@@ -306,3 +309,115 @@ async def test_input_is_validated(org: Org, model: ScriptedModel, body: dict) ->
     response = await org.clients["mia"].post(org_url(org.org_id, "/ai/assistant"), json=body)
     assert response.status_code == 422
     assert model.calls == []
+
+
+# --- proposals: the assistant drafts, the user approves -----------------------------
+
+
+def proposals_made(response: Any) -> list[dict]:
+    return [use for use in response.json()["tools_used"] if use["tool"].startswith("propose_")]
+
+
+async def test_a_proposal_changes_nothing_until_the_user_approves_it(
+    org: Org, model: ScriptedModel, db_session: AsyncSession
+) -> None:
+    seen: list[dict] = []
+
+    def capture(messages: list[Message]) -> ModelTurn:
+        seen.append(last_tool_result(messages))
+        return answer("I've proposed it; approve it to apply.")
+
+    model.steps = [tool("propose_priority", {"refs": ["R1"], "priority": "urgent"}), capture]
+    response = await ask(org.clients["manager"], org.org_id, request_id=org.printer)
+    assert response.status_code == 200, response.text
+    proposal = response.json()["proposal"]
+    assert (proposal["status"], proposal["action"]) == ("pending", "change_priority")
+    assert proposal["summary"] == "Change the priority of 1 request to urgent"
+    assert [item["title"] for item in proposal["items"]] == ["Printer jammed"]
+    # The model is told it's waiting, with refs (never ids: see the UUID test above).
+    assert seen[0]["data"]["proposal"] == "P1" and "Nothing has changed" in seen[0]["data"]["state"]
+    stored = (await db_session.scalars(select(AIProposal))).one()
+    assert stored.run_id == (await db_session.scalars(select(AIUsage))).one().id
+
+    request_url = org_url(org.org_id, f"/requests/{org.printer}")
+    assert (await org.clients["manager"].get(request_url)).json()["priority"] != "urgent"
+    approved = await org.clients["manager"].post(
+        org_url(org.org_id, f"/ai/proposals/{proposal['id']}/approve"), json={"payload_hash": proposal["payload_hash"]}
+    )
+    assert approved.status_code == 200, approved.text
+    assert (await org.clients["manager"].get(request_url)).json()["priority"] == "urgent"
+
+
+async def test_filters_are_resolved_and_counted_by_the_server(org: Org, model: ScriptedModel) -> None:
+    model.steps = [tool("propose_cancel", {"filters": {"department": "IT"}}), answer("Proposed.")]
+    response = await ask(org.clients["manager"], org.org_id)
+    assert sorted(i["title"] for i in response.json()["proposal"]["items"]) == ["Kiosk frozen", "Printer jammed"]
+
+
+async def test_too_many_matches_is_an_error_for_the_model_to_narrow(
+    org: Org, model: ScriptedModel, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(proposal_tools, "MAX_ITEMS", 1)
+    model.steps = [tool("propose_cancel", {"filters": {}}), last_tool_result_as_answer]
+    response = await ask(org.clients["manager"], org.org_id)
+    assert response.json()["answer"].startswith("2 requests match; a proposal can change at most 1")
+    assert proposals_made(response) == [{"tool": "propose_cancel", "status": "invalid_arguments"}]
+    assert response.json()["proposal"] is None
+    assert await db_session.scalar(select(func.count()).select_from(AIProposal)) == 0
+
+
+@pytest.mark.parametrize("arguments", [{}, {"refs": ["R1"], "filters": {}}])
+async def test_a_target_is_refs_or_filters_not_both(org: Org, model: ScriptedModel, arguments: dict) -> None:
+    model.steps = [tool("propose_cancel", arguments), answer("ok")]
+    response = await ask(org.clients["manager"], org.org_id, request_id=org.printer)
+    assert proposals_made(response) == [{"tool": "propose_cancel", "status": "invalid_arguments"}]
+
+
+async def test_only_one_proposal_per_question(org: Org, model: ScriptedModel, db_session: AsyncSession) -> None:
+    model.steps = [
+        tool("propose_cancel", {"refs": ["R1"]}),
+        tool("propose_priority", {"refs": ["R1"], "priority": "low"}, call_id="c2"),
+        answer("ok"),
+    ]
+    response = await ask(org.clients["manager"], org.org_id, request_id=org.printer)
+    assert proposals_made(response) == [
+        {"tool": "propose_cancel", "status": "ok"},
+        {"tool": "propose_priority", "status": "forbidden"},
+    ]
+    assert response.json()["proposal"]["action"] == "cancel"
+    assert await db_session.scalar(select(func.count()).select_from(AIProposal)) == 1
+
+
+async def test_a_member_proposes_only_what_they_could_do_themselves(org: Org, model: ScriptedModel) -> None:
+    # Offered tools are filtered by role, and the executor re-checks a tool that wasn't offered.
+    model.steps = [tool("propose_assign", {"refs": ["R1"], "assignee": "me"}), answer("ok")]
+    response = await ask(org.clients["mia"], org.org_id, request_id=org.printer)
+    assert proposals_made(response) == [{"tool": "propose_assign", "status": "forbidden"}]
+    # Max can't see Mia's request, so it can't be targeted by filters either: nothing matches.
+    model.steps, model.calls = [tool("propose_cancel", {"filters": {"title_contains": "printer"}}), answer("ok")], []
+    response = await ask(org.clients["max"], org.org_id)
+    assert proposals_made(response) == [{"tool": "propose_cancel", "status": "not_found"}]
+
+
+async def test_requests_that_cant_change_are_reported_not_proposed(org: Org, model: ScriptedModel) -> None:
+    assert (await org.clients["mia"].post(org_url(org.org_id, f"/requests/{org.printer}/cancel"))).status_code == 200
+    model.steps = [tool("propose_cancel", {"refs": ["R1"]}), last_tool_result_as_answer]
+    response = await ask(org.clients["mia"], org.org_id, request_id=org.printer)
+    assert proposals_made(response) == [{"tool": "propose_cancel", "status": "forbidden"}]
+    assert response.json()["answer"].startswith("None of these requests can be changed that way (Printer jammed:")
+
+
+async def test_no_proposal_is_kept_when_the_run_fails(org: Org, model: ScriptedModel, db_session: AsyncSession) -> None:
+    def fail(_: list[Message]) -> ModelTurn:
+        raise DrafterError(DraftFailure.PROVIDER_ERROR, "boom")
+
+    model.steps = [tool("propose_cancel", {"refs": ["R1"]}), fail]
+    response = await ask(org.clients["manager"], org.org_id, request_id=org.printer)
+    assert response.status_code >= 500
+    # The user never saw it, so there is nothing for them to approve.
+    assert await db_session.scalar(select(func.count()).select_from(AIProposal)) == 0
+    assert (await db_session.scalars(select(AIUsage))).one().outcome == DraftFailure.PROVIDER_ERROR.value
+
+
+def last_tool_result_as_answer(messages: list[Message]) -> ModelTurn:
+    return answer(last_tool_result(messages)["error"]["message"])
